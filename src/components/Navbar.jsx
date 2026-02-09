@@ -23,8 +23,12 @@ export function Navbar() {
                         <Link to="/trips" className="text-foreground hover:text-primary px-3 py-2 rounded-md text-sm font-medium">
                             My Trips
                         </Link>
-                        <Button variant="outline" size="sm">Log In</Button>
-                        <Button size="sm">Sign Up</Button>
+                        <Button variant="outline" size="sm" asChild>
+                            <Link to="/auth/login">Log In</Link>
+                        </Button>
+                        <Button size="sm" asChild>
+                            <Link to="/auth/signup">Sign Up</Link>
+                        </Button>
                     </div>
                     <div className="-mr-2 flex items-center sm:hidden">
                         <button
@@ -54,8 +58,12 @@ export function Navbar() {
                             My Trips
                         </Link>
                         <div className="mt-4 px-3 space-y-2">
-                            <Button variant="outline" className="w-full justify-center">Log In</Button>
-                            <Button className="w-full justify-center">Sign Up</Button>
+                            <Button variant="outline" className="w-full justify-center" asChild>
+                                <Link to="/auth/login">Log In</Link>
+                            </Button>
+                            <Button className="w-full justify-center" asChild>
+                                <Link to="/auth/signup">Sign Up</Link>
+                            </Button>
                         </div>
                     </div>
                 </div>
