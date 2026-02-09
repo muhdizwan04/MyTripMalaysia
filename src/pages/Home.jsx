@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 
 export default function Home() {
@@ -12,7 +13,9 @@ export default function Home() {
                     Plan your perfect trip with AI-powered itineraries. Explore hidden gems, track expenses, and travel seamlessly.
                 </p>
                 <div className="mt-10 flex items-center justify-center gap-x-6">
-                    <Button size="lg">Start Planning</Button>
+                    <Button size="lg" asChild>
+                        <Link to="/trips/create">Start Planning</Link>
+                    </Button>
                     <Button variant="outline" size="lg">Learn More</Button>
                 </div>
             </div>
