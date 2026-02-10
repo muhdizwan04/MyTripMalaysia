@@ -25,11 +25,11 @@ function MapBounds({ markers }) {
 }
 
 // Custom Numbered Icon
-const createNumberedIcon = (number) => {
+const createNumberedIcon = (number, isPast) => {
     return divIcon({
         className: 'custom-marker-icon',
         html: `<div style="
-            background-color: #2563eb; 
+            background-color: ${isPast ? '#94a3b8' : '#2563eb'}; 
             color: white; 
             border-radius: 50%; 
             width: 24px; 
@@ -41,6 +41,7 @@ const createNumberedIcon = (number) => {
             border: 2px solid white; 
             box-shadow: 0 2px 4px rgba(0,0,0,0.3);
             font-size: 12px;
+            filter: ${isPast ? 'grayscale(100%)' : 'none'};
         ">${number}</div>`,
         iconSize: [24, 24],
         iconAnchor: [12, 12],
@@ -71,11 +72,15 @@ const STATE_COORDS = {
 export default function TripMap({ items = [] }) {
     // Collect all valid markers from itinerary items
     let globalIndex = 0;
+
     const markers = items.flatMap((day, dayIndex) =>
         (day.activities || []).map((act, actIndex) => {
             // Use actual coords from activity if available, else fallback to state center
             const stateCoords = STATE_COORDS[day.state] || STATE_COORDS['Kuala Lumpur'];
             const position = act.coords || stateCoords;
+            const isTransport = act.type === 'transport';
+
+            if (isTransport) return null; // Skip markers for transport lines? Or keep them? Usually transport doesn't have coords in this data.
 
             globalIndex++;
             return {
@@ -83,11 +88,13 @@ export default function TripMap({ items = [] }) {
                 name: act.name,
                 category: act.category,
                 day: day.day,
+                time: act.time,
+                isPast: act.isPast,
                 number: globalIndex,
                 position: position
             };
         })
-    );
+    ).filter(Boolean);
 
     const polylinePositions = markers.map(marker => marker.position);
 
@@ -114,18 +121,25 @@ export default function TripMap({ items = [] }) {
                     pathOptions={{ color: '#3b82f6', weight: 4, opacity: 0.7, dashArray: '10, 10' }}
                 />
 
-                {markers.map(marker => (
-                    <Marker
-                        key={marker.id}
-                        position={marker.position}
-                        icon={createNumberedIcon(marker.number)}
-                    >
-                        <Popup>
-                            <div className="text-sm font-semibold">{marker.name}</div>
-                            <div className="text-xs text-muted-foreground">Day {marker.day} • {marker.category}</div>
-                        </Popup>
-                    </Marker>
-                ))}
+                {markers.map(marker => {
+                    // Logic to check if past. We need base date. 
+                    // Since we don't have it passed prop, we might need to update parent to pass it.
+                    // For now, let's just use the isPast prop if it exists on the activity (we'll add it in parent).
+                    const isPast = marker.isPast || false;
+
+                    return (
+                        <Marker
+                            key={marker.id}
+                            position={marker.position}
+                            icon={createNumberedIcon(marker.number, isPast)}
+                        >
+                            <Popup>
+                                <div className="text-sm font-semibold">{marker.name}</div>
+                                <div className="text-xs text-muted-foreground">Day {marker.day} • {marker.time}</div>
+                            </Popup>
+                        </Marker>
+                    );
+                })}
                 <MapBounds markers={markers} />
             </MapContainer>
         </div>

@@ -99,6 +99,7 @@ export const STATE_ACTIVITIES = {
             image: "https://images.unsplash.com/photo-1582650625119-3a31f8fa2699?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
             videoUrl: "https://www.youtube.com/embed/5U7DkL-3-uQ",
             description: "A massive multi-theme park with water slides, wildlife, and scream-worthy rides. Features Vuvuzela, the world's largest water ride.",
+            duration: 360, isIndoor: false, bestTime: "Morning",
             reviews: [
                 { user: "Sarah", rating: 5, text: "Best water park in Malaysia! The Vuvuzela is terrifyingly good." },
                 { user: "John", rating: 4, text: "Kids loved the wildlife section. A bit hot, so bring sunscreen." },
@@ -112,15 +113,32 @@ export const STATE_ACTIVITIES = {
             image: "https://images.unsplash.com/photo-1544013919-4bb5cb5b77ef?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
             videoUrl: "https://www.youtube.com/embed/PjE3Wn_XmIs",
             description: "Iconic Hindu temple set in limestone caves with a massive golden statue of Lord Murugan. The 272 steps are painted in vibrant rainbow colors.",
+            duration: 120, isIndoor: false, bestTime: "Morning",
             reviews: [
                 { user: "Emma", rating: 5, text: "272 steps were worth it! The view from the top is great." },
                 { user: "Loke", rating: 4, text: "Watch out for the monkeys! They will take your food and bags." },
                 { user: "Divya", rating: 5, text: "The architectural colors are stunning since the paint job." }
             ]
         },
-        { id: 's3', name: "I-City Theme Park", type: "activity", category: "Nightlife", price: 50, rating: 4.3, coords: [3.0648, 101.4851], image: "https://images.unsplash.com/photo-1583248356463-6e7e1532130e?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80", description: "City of Digital Lights with amazing LED displays and a Snow Walk." },
-        { id: 's4', name: "Village Park Nasi Lemak", type: "food", category: "Viral Food", price: 25, rating: 4.8, coords: [3.1307, 101.6225], image: "https://images.unsplash.com/photo-1574484284002-952d92456975?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80", description: "Legitimately the best Nasi Lemak Ayam Goreng in the country.", reviews: [{ user: "Ali", rating: 5, text: "Crispy chicken 10/10" }, { user: "Wei", rating: 4, text: "Long queue but worth it." }] },
-        { id: 's5', name: "One Utama Shopping Centre", type: "shopping", category: "Mall", price: 0, rating: 4.7, coords: [3.1502, 101.6152], image: "https://images.unsplash.com/photo-1582037928769-181f2644ecb7?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80", description: "One of the world's largest malls with an indoor rainforest." }
+        {
+            id: 's3', name: "I-City Theme Park", type: "activity", category: "Nightlife", price: 50, rating: 4.3,
+            coords: [3.0648, 101.4851], image: "https://images.unsplash.com/photo-1583248356463-6e7e1532130e?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+            description: "City of Digital Lights with amazing LED displays and a Snow Walk.",
+            duration: 180, isIndoor: false, bestTime: "Night"
+        },
+        {
+            id: 's4', name: "Village Park Nasi Lemak", type: "food", category: "Viral Food", price: 25, rating: 4.8,
+            coords: [3.1307, 101.6225], image: "https://images.unsplash.com/photo-1574484284002-952d92456975?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+            description: "Legitimately the best Nasi Lemak Ayam Goreng in the country.",
+            duration: 60, isIndoor: true, bestTime: "Morning",
+            reviews: [{ user: "Ali", rating: 5, text: "Crispy chicken 10/10" }, { user: "Wei", rating: 4, text: "Long queue but worth it." }]
+        },
+        {
+            id: 's5', name: "One Utama Shopping Centre", type: "shopping", category: "Mall", price: 0, rating: 4.7,
+            coords: [3.1502, 101.6152], image: "https://images.unsplash.com/photo-1582037928769-181f2644ecb7?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+            description: "One of the world's largest malls with an indoor rainforest.",
+            duration: 180, isIndoor: true, bestTime: "Afternoon"
+        }
     ],
     "Kuala Lumpur": [
         {
@@ -130,13 +148,46 @@ export const STATE_ACTIVITIES = {
             image: "https://images.unsplash.com/photo-1548013146-72479768bbaa?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
             videoUrl: "https://www.youtube.com/embed/V6_yFf3fD8A",
             description: "The world's tallest twin towers. Best viewed at night from KLCC Park. You can walk the Skybridge connecting the two towers.",
+            duration: 90, isIndoor: false, bestTime: "Evening",
             reviews: [
                 { user: "Tom", rating: 5, text: "Iconic! Must see when in Malaysia." },
                 { user: "Lucy", rating: 5, text: "The view from the bridge is amazing but book tickets in advance." }
             ]
         },
-        { id: 'k3', name: "Pavilion KL", type: "shopping", category: "Mall", price: 0, rating: 4.8, coords: [3.1485, 101.7139], image: "https://images.unsplash.com/photo-1582037928769-181f2644ecb7?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80", description: "Luxury shopping destination with award-winning store concepts." }
+        {
+            id: 'k3', name: "Pavilion KL", type: "shopping", category: "Mall", price: 0, rating: 4.8,
+            coords: [3.1485, 101.7139], image: "https://images.unsplash.com/photo-1582037928769-181f2644ecb7?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+            description: "Luxury shopping destination with award-winning store concepts.",
+            duration: 120, isIndoor: true, bestTime: "Afternoon"
+        }
     ]
+};
+
+export const DESTINATION_INTELLIGENCE = {
+    "Selangor": { minDays: 2, suggestedPace: "Balanced", bestFor: ["Families", "Theme Parks"] },
+    "Kuala Lumpur": { minDays: 3, suggestedPace: "Packed", bestFor: ["Shopping", "City Sightseeing"] },
+    "Penang": { minDays: 3, suggestedPace: "Relaxed", bestFor: ["Food", "Heritage"] },
+    "Melaka": { minDays: 2, suggestedPace: "Relaxed", bestFor: ["History", "Food"] },
+    "Johor": { minDays: 2, suggestedPace: "Balanced", bestFor: ["Theme Parks", "Shopping"] }
+};
+
+export const ITINERARY_RULES = {
+    maxActivitiesPerDay: 4,
+    minBreakTime: 30, // minutes
+    maxTravelTimePerDay: 120, // minutes
+    dayStartHour: 9, // 9 AM
+    dayEndHour: 22, // 10 PM
+    warningThresholds: {
+        busyDay: 4, // activities
+        expensiveDay: 500, // RM
+        travelHeavy: 60 // minutes
+    }
+};
+
+export const BUDGET_DEFAULTS = {
+    foodPerDay: { low: 30, mid: 80, high: 200 },
+    transportPerDay: { low: 10, mid: 30, high: 100 },
+    miscPerDay: 50
 };
 
 export const MALAYSIA_LOCATIONS = [
@@ -290,3 +341,163 @@ export const FEED_POSTS = [
         timestamp: '4 days ago'
     }
 ];
+
+export const VIRAL_SPOTS = [
+    {
+        id: 1,
+        name: "Village Park Nasi Lemak",
+        location: "Petaling Jaya",
+        rating: 4.8,
+        price: 25,
+        image: "https://images.unsplash.com/photo-1574484284002-952d92456975?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80",
+        tag: "Viral Food",
+        description: "Best nasi lemak in KL! The sambal is perfectly spicy and the chicken is crispy. Long queues form early morning but worth the wait."
+    },
+    {
+        id: 2,
+        name: "Batu Caves Rainbow Stairs",
+        location: "Selangor",
+        rating: 4.6,
+        price: 0,
+        image: "https://images.unsplash.com/photo-1544013919-4bb5cb5b77ef?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80",
+        tag: "Must Visit",
+        description: "Iconic 272 steps painted in vibrant rainbow colors. Home to Hindu shrines and monkeys. Come early to avoid crowds and heat."
+    },
+    {
+        id: 3,
+        name: "Pavilion KL Mall",
+        location: "Kuala Lumpur",
+        rating: 4.8,
+        price: 0,
+        image: "https://images.unsplash.com/photo-1582037928769-181f2644ecb7?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80",
+        tag: "Shopping",
+        description: "Premier shopping destination in Bukit Bintang. Over 450 retail outlets including luxury brands. Great food court and cinema."
+    }
+];
+
+export const FEATURED_TRIPS = [
+    {
+        id: 1,
+        title: "Foodie's Paradise",
+        days: "3 Days",
+        states: ["Penang", "Ipoh"],
+        price: "RM 450",
+        image: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80",
+        tag: "Culinary"
+    },
+    {
+        id: 2,
+        title: "Heritage Trail",
+        days: "4 Days",
+        states: ["Malacca", "Negeri Sembilan"],
+        price: "RM 380",
+        image: "https://images.unsplash.com/photo-1596422846543-75c6fc197f07?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80",
+        tag: "Culture"
+    },
+    {
+        id: 3,
+        title: "Island Escape",
+        days: "5 Days",
+        states: ["Sabah", "Langkawi"],
+        price: "RM 1200",
+        image: "https://images.unsplash.com/photo-1596422846543-75c6fc197f07?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80",
+        tag: "Relaxation"
+    }
+];
+
+export const MOCK_ITINERARIES = {
+    1: [ // Foodie's Paradise
+        {
+            day: 1,
+            state: 'Penang',
+            activities: [
+                { id: 'p1', name: 'Roti Canai Transfer Road', category: 'Breakfast', type: 'food', time: '08:00', price: 10, coords: [5.4200, 100.3300] },
+                { id: 'p2', name: 'Pinang Peranakan Mansion', category: 'Culture', type: 'activity', time: '10:30', price: 25, coords: [5.4180, 100.3400] },
+                { id: 'p3', name: 'Penang Road Famous Teochew Chendul', category: 'Lunch', type: 'food', time: '13:00', price: 8, coords: [5.4170, 100.3300] },
+                { id: 'p4', name: 'Clan Jetties', category: 'Sightseeing', type: 'activity', time: '16:00', price: 0, coords: [5.4120, 100.3400] },
+                { id: 'p5', name: 'Gurney Drive Hawker Centre', category: 'Dinner', type: 'food', time: '19:30', price: 30, coords: [5.4400, 100.3000] }
+            ]
+        },
+        {
+            day: 2,
+            state: 'Penang',
+            activities: [
+                { id: 'p6', name: 'Toh Soon Cafe', category: 'Breakfast', type: 'food', time: '08:30', price: 12, coords: [5.4185, 100.3320] },
+                { id: 'p7', name: 'Penang Hill', category: 'Nature', type: 'activity', time: '10:00', price: 30, coords: [5.4080, 100.2770] },
+                { id: 'p8', name: 'Laksa at Ayer Itam', category: 'Lunch', type: 'food', time: '13:30', price: 15, coords: [5.4010, 100.2780] },
+                { id: 'p9', name: 'Batu Ferringhi Beach', category: 'Relaxation', type: 'activity', time: '17:00', price: 0, coords: [5.4670, 100.2500] }
+            ]
+        },
+        {
+            day: 3,
+            state: 'Ipoh',
+            activities: [
+                { id: 'i1', name: 'Nam Heong White Coffee', category: 'Breakfast', type: 'food', time: '09:00', price: 15, coords: [4.5950, 101.0790] },
+                { id: 'i2', name: 'Kek Lok Tong Cave Temple', category: 'Culture', type: 'activity', time: '11:00', price: 0, coords: [4.5600, 101.1200] },
+                { id: 'i3', name: 'Nasi Ganja Yong Suan', category: 'Lunch', type: 'food', time: '13:30', price: 20, coords: [4.5980, 101.0800] },
+                { id: 'i4', name: 'Concubine Lane', category: 'Shopping', type: 'shopping', time: '15:30', price: 0, coords: [4.5960, 101.0780] }
+            ]
+        }
+    ],
+    2: [ // Heritage Trail
+        {
+            day: 1,
+            state: 'Malacca',
+            activities: [
+                { id: 'm1', name: 'The Daily Fix Cafe', category: 'Breakfast', type: 'food', time: '09:00', price: 25, coords: [2.1950, 102.2490] },
+                { id: 'm2', name: 'Dutch Square (Red Square)', category: 'History', type: 'activity', time: '10:30', price: 0, coords: [2.1930, 102.2480] },
+                { id: 'm3', name: 'Chicken Rice Ball', category: 'Lunch', type: 'food', time: '13:00', price: 18, coords: [2.1945, 102.2485] },
+                { id: 'm4', name: 'A Famosa Fort', category: 'History', type: 'activity', time: '15:00', price: 0, coords: [2.1920, 102.2500] },
+                { id: 'm5', name: 'Jonker Walk Night Market', category: 'Dinner', type: 'food', time: '19:00', price: 40, coords: [2.1950, 102.2480] }
+            ]
+        },
+        {
+            day: 2,
+            state: 'Malacca',
+            activities: [
+                { id: 'm6', name: 'Baba Nyonya Heritage Museum', category: 'Culture', type: 'activity', time: '10:00', price: 16, coords: [2.1960, 102.2470] },
+                { id: 'm7', name: 'Nyonya Laksa', category: 'Lunch', type: 'food', time: '12:30', price: 20, coords: [2.1970, 102.2480] },
+                { id: 'm8', name: 'Melaka River Cruise', category: 'Sightseeing', type: 'activity', time: '17:30', price: 30, coords: [2.1940, 102.2490] }
+            ]
+        },
+        {
+            day: 3,
+            state: 'Negeri Sembilan',
+            activities: [
+                { id: 'n1', name: 'Seremban Siew Pao', category: 'Snack', type: 'food', time: '10:00', price: 15, coords: [2.7200, 101.9400] },
+                { id: 'n2', name: 'Centipede Temple', category: 'Culture', type: 'activity', time: '11:30', price: 0, coords: [2.7300, 101.9500] },
+                { id: 'n3', name: 'Masak Lemak Cili Api', category: 'Lunch', type: 'food', time: '13:30', price: 25, coords: [2.7250, 101.9450] },
+                { id: 'n4', name: 'Port Dickson Beach', category: 'Relaxation', type: 'activity', time: '16:00', price: 0, coords: [2.5200, 101.7900] }
+            ]
+        }
+    ],
+    3: [ // Island Escape
+        {
+            day: 1,
+            state: 'Sabah',
+            activities: [
+                { id: 'sb1', name: 'Gaya Street Sunday Market', category: 'Shopping', type: 'shopping', time: '08:00', price: 0, coords: [5.9830, 116.0770] },
+                { id: 'sb2', name: 'Tunku Abdul Rahman Park', category: 'Nature', type: 'activity', time: '10:00', price: 50, coords: [5.9600, 116.0000] },
+                { id: 'sb3', name: 'Welcome Seafood Restaurant', category: 'Dinner', type: 'food', time: '19:00', price: 60, coords: [5.9800, 116.0700] }
+            ]
+        },
+        {
+            day: 2,
+            state: 'Sabah',
+            activities: [
+                { id: 'sb4', name: 'Mari Mari Cultural Village', category: 'Culture', type: 'activity', time: '09:00', price: 100, coords: [5.9800, 116.1500] },
+                { id: 'sb5', name: 'Soto Makassar', category: 'Lunch', type: 'food', time: '13:00', price: 15, coords: [5.9850, 116.0800] },
+                { id: 'sb6', name: 'Tanjung Aru Sunset', category: 'Scenery', type: 'activity', time: '17:30', price: 0, coords: [5.9480, 116.0450] }
+            ]
+        },
+        {
+            day: 3,
+            state: 'Langkawi',
+            activities: [
+                { id: 'l1', name: 'Langkawi SkyCab', category: 'Adventure', type: 'activity', time: '09:30', price: 85, coords: [6.3700, 99.6700] },
+                { id: 'l2', name: 'Laksa Langkawi', category: 'Lunch', type: 'food', time: '13:00', price: 12, coords: [6.3500, 99.6800] },
+                { id: 'l3', name: 'Pantai Cenang', category: 'Relaxation', type: 'activity', time: '16:00', price: 0, coords: [6.2900, 99.7300] }
+            ]
+        }
+    ]
+};

@@ -8,6 +8,7 @@ import CreateTrip from './pages/trips/CreateTrip';
 import ItineraryView from './pages/trips/ItineraryView';
 import ExpenseTracker from './pages/trips/ExpenseTracker';
 import BillSplitter from './pages/trips/BillSplitter';
+import TrendingItineraries from './pages/trips/TrendingItineraries';
 
 import { CurrencyProvider } from './context/CurrencyContext';
 import Profile from './pages/Profile';
@@ -38,6 +39,7 @@ function App() {
             <Route path="/shopping/mall/:mallId" element={<MallDetailsPage />} />
             <Route path="/must-visit" element={<MustVisitPage />} />
             <Route path="/trips/itinerary" element={<ItineraryView />} />
+            <Route path="/trips/trending" element={<TrendingItineraries />} />
             <Route path="/trips/expenses" element={<BillSplitter />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/settings" element={<SettingsPage />} />

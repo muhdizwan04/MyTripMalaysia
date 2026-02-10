@@ -3,8 +3,8 @@ import { Reorder } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
-import { STATE_ACTIVITIES, TRANSPORT_ROUTES, DEFAULT_ACTIVITIES, TRAVEL_ADVICE, TRANSPORT_ESTIMATES, ROUTE_GUIDANCE } from '../../lib/constants';
-import { Clock, MapPin, DollarSign, Loader2, ArrowLeft, Bus, Car, Star, X, Info, Sparkles, ArrowRight, Users, Plus, Calendar, ChevronUp, ChevronDown, AlertTriangle } from 'lucide-react';
+import { STATE_ACTIVITIES, TRANSPORT_ROUTES, DEFAULT_ACTIVITIES, TRAVEL_ADVICE, TRANSPORT_ESTIMATES, ROUTE_GUIDANCE, ITINERARY_RULES, BUDGET_DEFAULTS } from '../../lib/constants';
+import { Clock, MapPin, DollarSign, Loader2, ArrowLeft, Bus, Car, Star, X, Info, Sparkles, ArrowRight, Users, Plus, Calendar, ChevronUp, ChevronDown, AlertTriangle, Share2 } from 'lucide-react';
 import TripMap from '../../components/trips/TripMap';
 import ActivityDetailsModal from '../../components/trips/ActivityDetailsModal';
 import { useCurrency } from '../../context/CurrencyContext';
@@ -24,14 +24,76 @@ export default function ItineraryView() {
     const [itineraryAlert, setItineraryAlert] = useState(null);
     const [showReorderConfirm, setShowReorderConfirm] = useState(false);
     const [pendingReorderData, setPendingReorderData] = useState(null); // { dayIndex, newOrder }
+    const [showShareModal, setShowShareModal] = useState(false);
+    const [dismissedAlerts, setDismissedAlerts] = useState({});
+    const [tripMembers, setTripMembers] = useState(['You']);
     const mapRef = React.useRef(null);
+
+    useEffect(() => {
+        const saved = localStorage.getItem('trip_participants');
+        if (saved) {
+            setTripMembers(JSON.parse(saved));
+        } else {
+            // Default members if none found, to match previous mock
+            setTripMembers(['You', 'Sarah', 'Amir']);
+        }
+    }, []);
+
+    const isPreview = tripData.mode === 'preview';
+    const [showEditConfirm, setShowEditConfirm] = useState(false);
+
+    const handleStartPlanning = () => {
+        setShowEditConfirm(true);
+    };
+
+    const confirmStartPlanning = () => {
+        const newState = { ...tripData };
+        delete newState.mode;
+        // Keep preGeneratedItinerary so it doesn't regenerate from scratch/randomly
+        navigate('/trips/itinerary', { state: newState, replace: true });
+        setShowEditConfirm(false);
+    };
 
     const scrollToMap = () => {
         mapRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
 
+    const isActivityPast = (dayNum, timeStr) => {
+        try {
+            if (!timeStr) return false;
+            const baseDate = tripData.date ? new Date(tripData.date) : new Date();
+            baseDate.setHours(0, 0, 0, 0);
+
+            const targetDate = new Date(baseDate);
+            targetDate.setDate(baseDate.getDate() + dayNum - 1);
+
+            const now = new Date();
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            if (targetDate < today) return true;
+            if (targetDate > today) return false;
+
+            // Same day logic
+            const [h, m] = timeStr.split(':').map(Number);
+            const actTime = new Date(now);
+            actTime.setHours(h, m, 0, 0);
+
+            return now > actTime;
+        } catch (e) { return false; }
+    };
+
+    // ... (keep lines 34-486 same, just ensure we update the header) ...
+    // Actually, I can't skip lines in 'ReplacementContent' unless I use separate chunks or match exact context.
+    // I will use a smaller chunk for the state and another for the header.
+
     useEffect(() => {
         const generateItinerary = () => {
+            if (tripData.preGeneratedItinerary) {
+                setItinerary(tripData.preGeneratedItinerary);
+                setIsLoading(false);
+                return;
+            }
             setTimeout(() => {
                 try {
                     const days = tripData.duration || 3;
@@ -475,21 +537,23 @@ export default function ItineraryView() {
                             : (tripData.location || "Malaysian Story")}
                     </h1>
                     <div className="flex items-center gap-3">
-                        <div className="px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 flex items-center gap-2">
-                            <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></div>
-                            <span className="text-[10px] font-black text-green-600 uppercase tracking-widest">Optimized for you</span>
-                        </div>
+                        {isPreview ? (
+                            <div className="px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center gap-2">
+                                <Info className="h-3 w-3 text-blue-500" />
+                                <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Preview Mode</span>
+                            </div>
+                        ) : (
+                            <div className="px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 flex items-center gap-2">
+                                <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></div>
+                                <span className="text-[10px] font-black text-green-600 uppercase tracking-widest">Optimized for you</span>
+                            </div>
+                        )}
                         <span className="text-sm font-bold text-muted-foreground">Generated {new Date().toLocaleDateString()}</span>
                     </div>
                 </div>
 
                 <div className="flex items-center gap-3">
-                    <Button variant="outline" onClick={() => navigate('/trips/expenses')} className="h-14 px-8 rounded-2xl font-black border-2 transition-all hover:shadow-lg">
-                        <DollarSign className="mr-2 h-5 w-5" /> EXPENSES
-                    </Button>
-                    <Button onClick={handleSaveTrip} className="h-14 px-10 rounded-2xl font-black shadow-2xl shadow-primary/20 text-lg transition-all active:scale-95">
-                        SAVE TRIP
-                    </Button>
+                    {/* Header Controls moved to bottom */}
                 </div>
             </header>
 
@@ -536,7 +600,43 @@ export default function ItineraryView() {
                                     </div>
                                 </CardHeader>
                                 <CardContent className="px-0 relative p-0">
-                                    <div className="absolute left-[75px] top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary/20 via-primary/10 to-transparent"></div>
+                                    {/* Warnings */}
+                                    {(day.activities && day.activities.filter(a => a.type !== 'transport').length > ITINERARY_RULES.warningThresholds.busyDay && !dismissedAlerts[`busy-${dIdx}`]) && (
+                                        <div className="ml-28 mr-4 mb-6 bg-orange-50 border border-orange-200 p-4 rounded-2xl flex items-start gap-3 relative z-10 shadow-sm animate-in zoom-in-95">
+                                            <div className="p-2 bg-orange-100 rounded-lg text-orange-600">
+                                                <AlertTriangle className="h-5 w-5" />
+                                            </div>
+                                            <div className="flex-1">
+                                                <h4 className="text-xs font-black text-orange-800 uppercase tracking-widest mb-1">Busy Day Alert</h4>
+                                                <p className="text-sm text-orange-700 font-medium">You have many activities planned. Consider moving some to another day.</p>
+                                            </div>
+                                            <button
+                                                onClick={() => setDismissedAlerts(prev => ({ ...prev, [`busy-${dIdx}`]: true }))}
+                                                className="h-6 w-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center hover:bg-orange-200 transition-colors"
+                                            >
+                                                <X className="h-3 w-3" />
+                                            </button>
+                                        </div>
+                                    )}
+                                    {(() => {
+                                        const dayCost = day.activities.reduce((sum, a) => sum + (a.price || 0), 0);
+                                        if (dayCost > BUDGET_DEFAULTS.foodPerDay.high + BUDGET_DEFAULTS.transportPerDay.high + 200) { // Arbitrary daily high limit
+                                            return (
+                                                <div className="mx-4 mb-6 bg-red-50 border border-red-200 p-4 rounded-2xl flex items-start gap-3">
+                                                    <div className="p-2 bg-red-100 rounded-lg text-red-600">
+                                                        <DollarSign className="h-5 w-5" />
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="text-xs font-black text-red-800 uppercase tracking-widest mb-1">High Spending</h4>
+                                                        <p className="text-sm text-red-700 font-medium">Day total (RM {dayCost}) exceeds typical daily budget. Check your expenses.</p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    })()}
+
+                                    <div className="absolute left-[75px] top-0 bottom-0 w-1 bg-gradient-to-b from-primary/30 via-primary/20 to-transparent"></div>
                                     <Reorder.Group
                                         axis="y"
                                         values={day.activities || []}
@@ -562,7 +662,7 @@ export default function ItineraryView() {
                                                     <div className="absolute left-[71px] top-6 h-3 w-3 rounded-full bg-primary ring-4 ring-background z-10 shadow-[0_0_15px_rgba(var(--primary),0.3)]"></div>
 
                                                     {/* Activity Card */}
-                                                    <div className="space-y-4">
+                                                    <div className={`space-y-4 transition-opacity duration-500 ${isActivityPast(day.day, activity.time) ? 'opacity-50 grayscale' : ''}`}>
                                                         <div
                                                             className="bg-card p-6 rounded-[32px] border-2 border-muted hover:border-primary/30 hover:shadow-2xl hover:shadow-primary/5 transition-all flex flex-col md:flex-row gap-6 cursor-pointer relative"
                                                             onClick={() => setSelectedActivity(activity)}
@@ -769,7 +869,14 @@ export default function ItineraryView() {
                     <div className="sticky top-10 space-y-8">
                         {/* Map View */}
                         <div className="rounded-[40px] overflow-hidden border-8 border-background shadow-2xl relative h-80">
-                            <TripMap items={itinerary} />
+                            {/* Pass items with isPast flag */}
+                            <TripMap items={itinerary.map(day => ({
+                                ...day,
+                                activities: day.activities?.map(act => ({
+                                    ...act,
+                                    isPast: isActivityPast(day.day, act.time)
+                                }))
+                            }))} />
                             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-background/80 backdrop-blur-md px-6 py-2 rounded-full border border-primary/20 shadow-xl">
                                 <span className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-2">
                                     <MapPin className="h-3 w-3" /> Map Active
@@ -782,7 +889,7 @@ export default function ItineraryView() {
                             <CardHeader className="bg-muted/30 pb-6 p-8">
                                 <div className="flex items-center justify-between">
                                     <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
-                                        <Users className="h-4 w-4 text-primary" /> Travel Crew
+                                        <Users className="h-4 w-4 text-primary" /> Trip Members
                                     </CardTitle>
                                     <Button variant="ghost" size="sm" className="h-8 w-8 rounded-full bg-primary/10 text-primary" onClick={() => navigate('/trips/expenses')}>
                                         <Plus className="h-4 w-4" />
@@ -791,7 +898,7 @@ export default function ItineraryView() {
                             </CardHeader>
                             <CardContent className="p-8 space-y-6">
                                 <div className="flex -space-x-4">
-                                    {['You', 'Sarah', 'Amir'].map((m, i) => (
+                                    {tripMembers.map((m, i) => (
                                         <div key={i} className="h-12 w-12 rounded-full border-4 border-white bg-primary/10 flex items-center justify-center text-xs font-black ring-2 ring-primary/5">
                                             {m[0]}
                                         </div>
@@ -971,8 +1078,8 @@ export default function ItineraryView() {
                                     <div className="space-y-1">
                                         <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Estimated Cost</span>
                                         <p className="text-3xl font-black">{formatPrice(
-                                            itinerary.reduce((acc, d) => acc + (d.activities ? d.activities.reduce((a, s) => a + (s.price || 0), 0) : 0), 0) +
-                                            (tripData.accommodation ? Object.values(tripData.accommodation).reduce((acc, stay) => acc + (stay.price || 0), 0) : 0)
+                                            (itinerary.reduce((acc, d) => acc + (d.activities ? d.activities.reduce((a, s) => a + (s.price || 0), 0) : 0), 0) +
+                                                (tripData.accommodation ? Object.values(tripData.accommodation).reduce((acc, stay) => acc + (stay.price || 0), 0) : 0)) * (tripData.guests || 1)
                                         )}</p>
                                     </div>
                                     <div className="h-10 w-10 rounded-2xl bg-white/20 flex items-center justify-center">
@@ -980,12 +1087,32 @@ export default function ItineraryView() {
                                     </div>
                                 </div>
 
-                                <Button
-                                    onClick={handleSaveTrip}
-                                    className="w-full h-18 bg-white text-primary hover:bg-white/90 rounded-[28px] font-black text-xl shadow-2xl group transition-all"
-                                >
-                                    Confirm Plan <ArrowRight className="ml-2 h-6 w-6 group-hover:translate-x-1.5 transition-transform" />
-                                </Button>
+                                <div className="flex gap-3">
+                                    {isPreview ? (
+                                        <Button
+                                            onClick={handleStartPlanning}
+                                            className="w-full h-14 bg-white text-primary hover:bg-white/90 rounded-[28px] font-black text-xl shadow-2xl group transition-all"
+                                        >
+                                            Start Planning with this Template <ArrowRight className="ml-2 h-6 w-6 group-hover:translate-x-1.5 transition-transform" />
+                                        </Button>
+                                    ) : (
+                                        <>
+                                            <Button
+                                                variant="outline"
+                                                onClick={() => setShowShareModal(true)}
+                                                className="flex-1 h-14 bg-white/10 text-white border-white/10 hover:bg-white/20 rounded-[28px] font-black text-lg transition-all"
+                                            >
+                                                <Share2 className="mr-2 h-5 w-5" /> Share
+                                            </Button>
+                                            <Button
+                                                onClick={handleSaveTrip}
+                                                className="flex-[2] h-14 bg-white text-primary hover:bg-white/90 rounded-[28px] font-black text-xl shadow-2xl group transition-all"
+                                            >
+                                                Confirm Plan <ArrowRight className="ml-2 h-6 w-6 group-hover:translate-x-1.5 transition-transform" />
+                                            </Button>
+                                        </>
+                                    )}
+                                </div>
                             </CardContent>
                         </Card>
                     </div>
@@ -996,6 +1123,7 @@ export default function ItineraryView() {
                     onClose={() => setSelectedActivity(null)}
                     activity={selectedActivity}
                 />
+                {/* Bottom Buttons removed as per request (Share moved to sidebar, Save removed) */}
 
                 {/* Mini-Gem Addition Confirmation Dialog */}
                 {
@@ -1139,6 +1267,86 @@ export default function ItineraryView() {
                         </div>
                     )
                 }
+                {/* Share Modal */}
+                {showShareModal && (
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[80] p-4 animate-in fade-in">
+                        <div className="bg-white rounded-[40px] max-w-md w-full overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300 relative border border-white/20">
+                            <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl -mr-20 -mt-20"></div>
+                            <div className="p-8 text-center relative z-10">
+                                <div className="h-20 w-20 bg-primary/10 rounded-[24px] flex items-center justify-center mx-auto mb-6 transform rotate-3 shadow-inner">
+                                    <Sparkles className="h-10 w-10 text-primary" />
+                                </div>
+                                <h2 className="text-3xl font-black mb-2 tracking-tight text-foreground">Trip Ready!</h2>
+                                <p className="text-muted-foreground font-medium mb-8 leading-relaxed px-4">
+                                    Your adventure to <span className="text-primary font-bold">{(tripData.locations && tripData.locations.length > 0) ? tripData.locations.join(' & ') : (tripData.location || 'Malaysia')}</span> is beautifully planned.
+                                </p>
+
+                                <div className="bg-muted/30 rounded-3xl border-2 border-dashed border-primary/20 p-6 mb-8 relative">
+                                    <div className="flex justify-between items-end mb-4">
+                                        <div className="text-left">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Total Duration</p>
+                                            <p className="text-xl font-black">{tripData.duration} Days</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Est. Cost</p>
+                                            <p className="text-2xl font-black text-primary">
+                                                {(() => {
+                                                    const total = itinerary.reduce((sum, day) => {
+                                                        return sum + (day.activities?.reduce((dSum, act) => dSum + (act.price || 0), 0) || 0);
+                                                    }, 0);
+                                                    return formatPrice(total * (tripData.guests || 1));
+                                                })()}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="h-2 w-full bg-white rounded-full overflow-hidden shadow-sm">
+                                        <div className="h-full bg-primary w-2/3 rounded-full"></div>
+                                    </div>
+                                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-background px-3 text-[10px] font-black text-primary/60 uppercase tracking-widest border border-primary/10 rounded-full">Summary</div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Button size="lg" className="rounded-2xl font-black h-14 text-base" onClick={() => setShowShareModal(false)}>
+                                        COPY LINK
+                                    </Button>
+                                    <Button variant="outline" size="lg" className="rounded-2xl font-black h-14 text-base border-2 hover:bg-muted" onClick={() => setShowShareModal(false)}>
+                                        CLOSE
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Edit Preview Confirmation Dialog */}
+                {showEditConfirm && (
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[80] p-4 animate-in fade-in">
+                        <div className="bg-white rounded-[40px] max-w-md w-full overflow-hidden shadow-2xl p-8 text-center border border-white/20">
+                            <div className="h-20 w-20 bg-primary/10 rounded-[24px] flex items-center justify-center mx-auto mb-6 transform -rotate-3 shadow-inner">
+                                <Sparkles className="h-10 w-10 text-primary" />
+                            </div>
+                            <h2 className="text-2xl font-black mb-3 text-foreground">Customize this Trip?</h2>
+                            <p className="text-muted-foreground font-medium mb-8 leading-relaxed">
+                                This will create an editable copy of this itinerary for you. You can then add, remove, and reorder activities.
+                            </p>
+                            <div className="flex gap-3">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setShowEditConfirm(false)}
+                                    className="flex-1 h-12 rounded-2xl font-black"
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    onClick={confirmStartPlanning}
+                                    className="flex-1 h-12 rounded-2xl font-black bg-primary text-white hover:bg-primary/90"
+                                >
+                                    Yes, Let's Go!
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

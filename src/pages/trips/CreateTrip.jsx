@@ -8,7 +8,7 @@ import {
     Check, Star, Utensils, Camera, ShoppingBag, Compass,
     Sparkles, Plus, Clock, ArrowRight, X, Info, Car, Bus
 } from 'lucide-react';
-import { MALAYSIA_LOCATIONS, STATE_ACTIVITIES, ACCOMMODATION_DATA, TRANSPORT_ESTIMATES } from '../../lib/constants';
+import { MALAYSIA_LOCATIONS, STATE_ACTIVITIES, ACCOMMODATION_DATA, TRANSPORT_ESTIMATES, DESTINATION_INTELLIGENCE } from '../../lib/constants';
 import ActivityDetailsModal from '../../components/trips/ActivityDetailsModal';
 
 const PRIORITIES = [
@@ -191,19 +191,40 @@ export default function CreateTrip() {
                     <div className="grid grid-cols-2 gap-2">
                         {Object.keys(STATE_ACTIVITIES).map(state => {
                             const isSelected = tripData.locations.includes(state);
+                            const intelligence = DESTINATION_INTELLIGENCE[state];
                             return (
                                 <button
                                     key={state}
                                     onClick={() => toggleLocation(state)}
-                                    className={`flex items-center gap-2 px-4 py-3 rounded-2xl border-2 transition-all text-left ${isSelected ? 'border-primary bg-primary/5 text-primary' : 'border-muted text-muted-foreground hover:border-primary/20'}`}
+                                    className={`relative flex flex-col items-start gap-1 px-4 py-3 rounded-2xl border-2 transition-all text-left ${isSelected ? 'border-primary bg-primary/5 text-primary' : 'border-muted text-muted-foreground hover:border-primary/20'}`}
                                 >
-                                    <MapPin className={`h-4 w-4 ${isSelected ? 'text-primary' : 'text-primary/20'}`} />
-                                    <span className="font-bold text-xs truncate">{state}</span>
-                                    {isSelected && <Check className="h-3.5 w-3.5 ml-auto" />}
+                                    <div className="flex items-center gap-2 w-full">
+                                        <MapPin className={`h-4 w-4 ${isSelected ? 'text-primary' : 'text-primary/20'}`} />
+                                        <span className="font-bold text-xs truncate">{state}</span>
+                                        {isSelected && <Check className="h-3.5 w-3.5 ml-auto" />}
+                                    </div>
+                                    {intelligence && (
+                                        <span className="text-[9px] font-bold opacity-60 ml-6">
+                                            Best for {intelligence.minDays} days • {intelligence.suggestedPace}
+                                        </span>
+                                    )}
                                 </button>
                             );
                         })}
                     </div>
+                    {/* Soft Warning for Duration */}
+                    {(() => {
+                        const totalMinDays = tripData.locations.reduce((sum, loc) => sum + (DESTINATION_INTELLIGENCE[loc]?.minDays || 2), 0);
+                        if (tripData.locations.length > 0 && tripData.duration < totalMinDays) {
+                            return (
+                                <div className="flex items-center gap-2 text-orange-600 bg-orange-50 px-3 py-2 rounded-xl border border-orange-100 animate-in fade-in">
+                                    <Info className="h-3.5 w-3.5" />
+                                    <p className="text-[10px] font-bold">Recommended duration for selected spots is {totalMinDays} days.</p>
+                                </div>
+                            );
+                        }
+                        return null;
+                    })()}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -250,8 +271,8 @@ export default function CreateTrip() {
                         <button
                             onClick={() => setTripData({ ...tripData, transportMode: 'own' })}
                             className={`p-6 rounded-[24px] border-2 flex flex-col items-center gap-3 transition-all ${tripData.transportMode === 'own'
-                                    ? 'border-primary bg-primary/5 shadow-xl shadow-primary/5 scale-[1.02]'
-                                    : 'border-muted hover:border-primary/20'
+                                ? 'border-primary bg-primary/5 shadow-xl shadow-primary/5 scale-[1.02]'
+                                : 'border-muted hover:border-primary/20'
                                 }`}
                         >
                             <div className={`h-12 w-12 rounded-2xl flex items-center justify-center transition-all ${tripData.transportMode === 'own' ? 'bg-primary text-white shadow-lg' : 'bg-muted text-muted-foreground'
@@ -264,8 +285,8 @@ export default function CreateTrip() {
                         <button
                             onClick={() => setTripData({ ...tripData, transportMode: 'public' })}
                             className={`p-6 rounded-[24px] border-2 flex flex-col items-center gap-3 transition-all ${tripData.transportMode === 'public'
-                                    ? 'border-primary bg-primary/5 shadow-xl shadow-primary/5 scale-[1.02]'
-                                    : 'border-muted hover:border-primary/20'
+                                ? 'border-primary bg-primary/5 shadow-xl shadow-primary/5 scale-[1.02]'
+                                : 'border-muted hover:border-primary/20'
                                 }`}
                         >
                             <div className={`h-12 w-12 rounded-2xl flex items-center justify-center transition-all ${tripData.transportMode === 'public' ? 'bg-primary text-white shadow-lg' : 'bg-muted text-muted-foreground'
@@ -313,65 +334,83 @@ export default function CreateTrip() {
             )}
 
             <div className={`space-y-3 max-h-[420px] overflow-y-auto pr-2 custom-scrollbar`}>
-                {availableStateActivities.map(act => {
-                    const selected = tripData.activities.find(a => a.id === act.id);
+                {['Morning', 'Afternoon', 'Evening', 'Night'].map(timeSlot => {
+                    const activitiesInSlot = availableStateActivities.filter(a => (a.bestTime || 'Morning') === timeSlot);
+                    if (activitiesInSlot.length === 0) return null;
+
                     return (
-                        <div key={act.id} className={`p-4 rounded-[28px] border-2 transition-all ${selected ? 'border-primary bg-primary/5 shadow-sm' : 'border-muted'}`}>
-                            <div className="flex items-center gap-4 mb-3">
-                                <img src={act.image} className="h-16 w-16 rounded-[20px] object-cover shadow-sm" alt="" />
-                                <div className="flex-1">
-                                    <h4 className="font-bold text-sm leading-snug">{act.name}</h4>
-                                    <span className="text-[10px] font-black text-primary/70 uppercase tracking-tighter">{act.category}</span>
-                                </div>
-                                <Button
-                                    size="sm"
-                                    variant={selected ? "destructive" : "outline"}
-                                    className={`rounded-xl h-9 px-4 text-[10px] font-black transition-all ${selected ? 'shadow-lg shadow-destructive/20' : ''}`}
-                                    onClick={() => toggleActivity(act)}
-                                >
-                                    {selected ? <X className="h-4 w-4" /> : 'ADD'}
-                                </Button>
-                            </div>
-                            {selected && (
-                                <div className="flex items-center gap-4 py-3 border-t border-primary/10 mt-1">
-                                    <div className="flex items-center gap-2 flex-1">
-                                        <div className="p-2 bg-primary/10 rounded-lg"><Clock className="h-3.5 w-3.5 text-primary" /></div>
-                                        <div className="flex flex-col">
-                                            <span className="text-[9px] font-black text-muted-foreground uppercase leading-none mb-1">Schedule Time</span>
-                                            <input
-                                                type="time"
-                                                className="bg-transparent border-none p-0 text-sm font-black text-primary focus:ring-0 leading-none h-4"
-                                                value={selected.time}
-                                                onChange={(e) => updateActivityDetail(act.id, 'time', e.target.value)}
-                                            />
+                        <div key={timeSlot} className="space-y-3 mb-6">
+                            <h3 className="text-sm font-black text-primary uppercase tracking-widest pl-2 border-l-4 border-primary/20 sticky top-0 bg-background/95 backdrop-blur z-10 py-2">
+                                {timeSlot}
+                            </h3>
+                            {activitiesInSlot.map(act => {
+                                const selected = tripData.activities.find(a => a.id === act.id);
+                                return (
+                                    <div key={act.id} className={`p-4 rounded-[28px] border-2 transition-all ${selected ? 'border-primary bg-primary/5 shadow-sm' : 'border-muted'}`}>
+                                        <div className="flex items-center gap-4 mb-3">
+                                            <img src={act.image} className="h-16 w-16 rounded-[20px] object-cover shadow-sm" alt="" />
+                                            <div className="flex-1">
+                                                <h4 className="font-bold text-sm leading-snug">{act.name}</h4>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <span className="text-[10px] font-black text-primary/70 uppercase tracking-tighter">{act.category}</span>
+                                                    <span className="text-[10px] text-muted-foreground">•</span>
+                                                    <span className="text-[10px] font-bold text-muted-foreground">{act.duration ? `${act.duration / 60}h` : '2h'}</span>
+                                                    <span className="text-[10px] text-muted-foreground">•</span>
+                                                    <span className="text-[10px] font-bold text-muted-foreground">RM {act.price || 0}</span>
+                                                </div>
+                                            </div>
+                                            <Button
+                                                size="sm"
+                                                variant={selected ? "destructive" : "outline"}
+                                                className={`rounded-xl h-9 px-4 text-[10px] font-black transition-all ${selected ? 'shadow-lg shadow-destructive/20' : ''}`}
+                                                onClick={() => toggleActivity(act)}
+                                            >
+                                                {selected ? <X className="h-4 w-4" /> : 'ADD'}
+                                            </Button>
                                         </div>
+                                        {selected && (
+                                            <div className="flex items-center gap-4 py-3 border-t border-primary/10 mt-1">
+                                                <div className="flex items-center gap-2 flex-1">
+                                                    <div className="p-2 bg-primary/10 rounded-lg"><Clock className="h-3.5 w-3.5 text-primary" /></div>
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[9px] font-black text-muted-foreground uppercase leading-none mb-1">Schedule Time</span>
+                                                        <input
+                                                            type="time"
+                                                            className="bg-transparent border-none p-0 text-sm font-black text-primary focus:ring-0 leading-none h-4"
+                                                            value={selected.time}
+                                                            onChange={(e) => updateActivityDetail(act.id, 'time', e.target.value)}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="h-8 w-px bg-primary/10"></div>
+                                                <div className="flex-1 flex flex-col justify-center">
+                                                    <span className="text-[9px] font-black text-muted-foreground uppercase leading-none mb-1">Day</span>
+                                                    <select
+                                                        className="bg-transparent border-none p-0 text-sm font-black text-primary focus:ring-0 leading-none h-4 w-16"
+                                                        value={selected.day || 1}
+                                                        onChange={(e) => updateActivityDetail(act.id, 'day', parseInt(e.target.value))}
+                                                    >
+                                                        {[...Array(tripData.duration)].map((_, i) => (
+                                                            <option key={i + 1} value={i + 1}>Day {i + 1}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div className="h-8 w-px bg-primary/10"></div>
+                                                <div className="flex-1 flex flex-col justify-center">
+                                                    <span className="text-[9px] font-black text-muted-foreground uppercase leading-none mb-1">Duration</span>
+                                                    <select
+                                                        className="bg-transparent border-none p-0 text-sm font-black text-primary focus:ring-0 leading-none h-4 w-16"
+                                                        value={selected.duration}
+                                                        onChange={(e) => updateActivityDetail(act.id, 'duration', parseInt(e.target.value))}
+                                                    >
+                                                        {[1, 1.5, 2, 2.5, 3, 4, 5, 8].map(h => <option key={h} value={h}>{h} h</option>)}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                    <div className="h-8 w-px bg-primary/10"></div>
-                                    <div className="flex-1 flex flex-col justify-center">
-                                        <span className="text-[9px] font-black text-muted-foreground uppercase leading-none mb-1">Day</span>
-                                        <select
-                                            className="bg-transparent border-none p-0 text-sm font-black text-primary focus:ring-0 leading-none h-4 w-16"
-                                            value={selected.day || 1}
-                                            onChange={(e) => updateActivityDetail(act.id, 'day', parseInt(e.target.value))}
-                                        >
-                                            {[...Array(tripData.duration)].map((_, i) => (
-                                                <option key={i + 1} value={i + 1}>Day {i + 1}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div className="h-8 w-px bg-primary/10"></div>
-                                    <div className="flex-1 flex flex-col justify-center">
-                                        <span className="text-[9px] font-black text-muted-foreground uppercase leading-none mb-1">Duration</span>
-                                        <select
-                                            className="bg-transparent border-none p-0 text-sm font-black text-primary focus:ring-0 leading-none h-4 w-16"
-                                            value={selected.duration}
-                                            onChange={(e) => updateActivityDetail(act.id, 'duration', parseInt(e.target.value))}
-                                        >
-                                            {[1, 1.5, 2, 2.5, 3, 4, 5, 8].map(h => <option key={h} value={h}>{h} h</option>)}
-                                        </select>
-                                    </div>
-                                </div>
-                            )}
+                                );
+                            })}
                         </div>
                     );
                 })}

@@ -11,7 +11,14 @@ export default function BillSplitter() {
     const { formatPrice } = useCurrency();
 
     // State
-    const [participants, setParticipants] = useState(['You']);
+    const [participants, setParticipants] = useState(() => {
+        const saved = localStorage.getItem('trip_participants');
+        return saved ? JSON.parse(saved) : ['You', 'Sarah', 'Amir'];
+    });
+
+    useEffect(() => {
+        localStorage.setItem('trip_participants', JSON.stringify(participants));
+    }, [participants]);
     const [newParticipant, setNewParticipant] = useState('');
 
     const [amount, setAmount] = useState('');
@@ -246,8 +253,8 @@ export default function BillSplitter() {
                                         key={p}
                                         onClick={() => setPayer(p)}
                                         className={`shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all ${payer === p
-                                                ? 'bg-primary text-white shadow-md transform scale-105'
-                                                : 'bg-white border border-gray-100 text-gray-600'
+                                            ? 'bg-primary text-white shadow-md transform scale-105'
+                                            : 'bg-white border border-gray-100 text-gray-600'
                                             }`}
                                     >
                                         {p}

@@ -5,40 +5,7 @@ import { Card, CardContent } from '../components/ui/Card';
 import { Search, MapPin, Compass, Utensils, ShoppingBag, Camera, ChevronRight, Star, User, DollarSign, Sparkles, X } from 'lucide-react';
 import { useCurrency } from '../context/CurrencyContext';
 import FeedPost from '../components/feed/FeedPost';
-import { FEED_POSTS } from '../lib/constants';
-
-const VIRAL_SPOTS = [
-    {
-        id: 1,
-        name: "Village Park Nasi Lemak",
-        location: "Petaling Jaya",
-        rating: 4.8,
-        price: 25,
-        image: "https://images.unsplash.com/photo-1574484284002-952d92456975?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80",
-        tag: "Viral Food",
-        description: "Best nasi lemak in KL! The sambal is perfectly spicy and the chicken is crispy. Long queues form early morning but worth the wait."
-    },
-    {
-        id: 2,
-        name: "Batu Caves Rainbow Stairs",
-        location: "Selangor",
-        rating: 4.6,
-        price: 0,
-        image: "https://images.unsplash.com/photo-1544013919-4bb5cb5b77ef?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80",
-        tag: "Must Visit",
-        description: "Iconic 272 steps painted in vibrant rainbow colors. Home to Hindu shrines and monkeys. Come early to avoid crowds and heat."
-    },
-    {
-        id: 3,
-        name: "Pavilion KL Mall",
-        location: "Kuala Lumpur",
-        rating: 4.8,
-        price: 0,
-        image: "https://images.unsplash.com/photo-1582037928769-181f2644ecb7?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80",
-        tag: "Shopping",
-        description: "Premier shopping destination in Bukit Bintang. Over 450 retail outlets including luxury brands. Great food court and cinema."
-    }
-];
+import { FEED_POSTS, MOCK_ITINERARIES, FEATURED_TRIPS, VIRAL_SPOTS } from '../lib/constants';
 
 export default function Home() {
     const navigate = useNavigate();
@@ -126,26 +93,93 @@ export default function Home() {
                 )}
 
                 {/* Quick Actions - Hidden when searching */}
+                {/* Quick Actions - Hidden when searching */}
                 {!isSearching && (
-                    <div className="grid grid-cols-5 gap-2 mb-10">
-                        {[
-                            { icon: Compass, label: 'Plan Trip', path: '/trips/create' },
-                            { icon: Utensils, label: 'Find Food', path: '/food' },
-                            { icon: ShoppingBag, label: 'Shopping', path: '/shopping' },
-                            { icon: Camera, label: 'Must Visit', path: '/must-visit' },
-                            { icon: DollarSign, label: 'Bill Splitter', path: '/trips/expenses' }
-                        ].map((item, idx) => (
-                            <div
-                                key={idx}
-                                onClick={() => navigate(item.path)}
-                                className="bg-white rounded-[20px] px-2 py-4 flex flex-col items-center gap-2 cursor-pointer hover:shadow-lg transition-all border-2 border-white/50"
-                            >
-                                <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center">
-                                    <item.icon className="h-5 w-5 text-primary" />
+                    <div className="space-y-8 mb-10">
+                        {/* Prominent Start Planning CTA */}
+                        <div
+                            onClick={() => navigate('/trips/create')}
+                            className="bg-primary text-primary-foreground rounded-[28px] p-6 shadow-xl shadow-primary/20 cursor-pointer group relative overflow-hidden"
+                        >
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl -mr-10 -mt-10"></div>
+                            <div className="absolute bottom-0 left-0 w-24 h-24 bg-black/10 rounded-full blur-2xl -ml-5 -mb-5"></div>
+
+                            <div className="relative z-10 flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-2xl font-black tracking-tight mb-1">Start Planning</h2>
+                                    <p className="text-primary-foreground/80 font-medium text-sm">Build your perfect Malaysia trip in minutes.</p>
                                 </div>
-                                <span className="text-[8px] font-black tracking-wider text-[#1a1a1a] text-center leading-tight">{item.label}</span>
+                                <div className="h-12 w-12 bg-white/20 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform backdrop-blur-sm">
+                                    <Compass className="h-6 w-6 text-white" />
+                                </div>
                             </div>
-                        ))}
+                        </div>
+
+                        {/* Quick Actions Grid */}
+                        <div className="grid grid-cols-4 gap-2">
+                            {[
+                                { icon: Utensils, label: 'Find Food', path: '/food' },
+                                { icon: ShoppingBag, label: 'Shopping', path: '/shopping' },
+                                { icon: Camera, label: 'Must Visit', path: '/must-visit' },
+                                { icon: DollarSign, label: 'Expenses', path: '/trips/expenses' }
+                            ].map((item, idx) => (
+                                <div
+                                    key={idx}
+                                    onClick={() => navigate(item.path)}
+                                    className="bg-white rounded-[24px] py-4 flex flex-col items-center gap-2 cursor-pointer hover:shadow-lg transition-all border-2 border-white/50"
+                                >
+                                    <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center">
+                                        <item.icon className="h-5 w-5 text-primary" />
+                                    </div>
+                                    <span className="text-[9px] font-black tracking-wider text-[#1a1a1a] text-center leading-tight">{item.label}</span>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Featured Trips / Trending Itineraries */}
+                        <div>
+                            <div
+                                className="flex items-center justify-between mb-4 px-1 cursor-pointer hover:bg-white/5 p-2 transition-colors rounded-xl"
+                                onClick={() => navigate('/trips/trending')}
+                            >
+                                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Trending Itineraries</h3>
+                                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                            <div className="flex gap-4 overflow-x-auto no-scrollbar pb-4 -mx-6 px-6">
+                                {FEATURED_TRIPS.map((trip) => (
+                                    <div
+                                        key={trip.id}
+                                        onClick={() => navigate('/trips/itinerary', {
+                                            state: {
+                                                ...trip,
+                                                guests: 2,
+                                                locations: trip.states,
+                                                duration: parseInt(trip.days),
+                                                startDate: new Date(),
+                                                endDate: new Date(new Date().setDate(new Date().getDate() + parseInt(trip.days))),
+                                                preGeneratedItinerary: MOCK_ITINERARIES[trip.id],
+                                                mode: 'preview'
+                                            }
+                                        })}
+                                        className="min-w-[200px] h-[240px] rounded-[28px] overflow-hidden relative group cursor-pointer border-2 border-white/50 shadow-sm"
+                                    >
+                                        <img src={trip.image} alt={trip.title} className="md:w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                                        <div className="absolute bottom-4 left-4 right-4">
+                                            <div className="inline-block px-2 py-1 bg-primary/90 rounded-lg text-[8px] font-black text-white uppercase mb-2 backdrop-blur-md">
+                                                {trip.tag}
+                                            </div>
+                                            <h4 className="text-white font-black text-lg leading-tight mb-1">{trip.title}</h4>
+                                            <div className="flex items-center gap-2 text-white/80 text-[10px] font-bold">
+                                                <span>{trip.days}</span>
+                                                <span>•</span>
+                                                <span>{trip.price}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
                     </div>
                 )}
 
