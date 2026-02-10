@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, User, Heart, Bookmark, MessageCircle, MapPin, Settings } from 'lucide-react';
+import { ArrowLeft, User, Heart, Bookmark, MessageCircle, LayoutGrid, Settings } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/Card';
 import FeedPost from '../components/feed/FeedPost';
 import { FEED_POSTS } from '../lib/constants';
@@ -30,7 +30,7 @@ export default function Profile() {
     };
 
     const tabs = [
-        { id: 'posts', label: 'Posts', icon: MapPin, count: activityData.posts.length },
+        { id: 'posts', label: 'Posts', icon: LayoutGrid, count: activityData.posts.length },
         { id: 'comments', label: 'Comments', icon: MessageCircle, count: activityData.comments.length },
         { id: 'liked', label: 'Liked', icon: Heart, count: activityData.liked.length },
         { id: 'saved', label: 'Saved', icon: Bookmark, count: activityData.saved.length }
@@ -94,24 +94,20 @@ export default function Profile() {
 
                 {/* Activity Tabs */}
                 <div className="mb-6">
-                    <div className="flex gap-2 mb-6 overflow-x-auto no-scrollbar">
+                    <div className="flex w-full border-b border-muted/20 mb-6">
                         {tabs.map((tab) => (
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
-                                className={`shrink-0 px-4 py-3 rounded-2xl text-sm font-black uppercase tracking-wider flex items-center gap-2 transition-all ${activeTab === tab.id
-                                    ? 'bg-primary text-white'
-                                    : 'bg-white text-muted-foreground border-2 border-white/50 hover:border-primary/50'
+                                className={`flex-1 flex flex-col items-center justify-center py-4 relative transition-colors ${activeTab === tab.id
+                                    ? 'text-primary'
+                                    : 'text-muted-foreground hover:text-foreground'
                                     }`}
                             >
-                                <tab.icon className="h-4 w-4" />
-                                {tab.label}
-                                <span className={`text-xs px-2 py-0.5 rounded-full ${activeTab === tab.id
-                                    ? 'bg-white/20 text-white'
-                                    : 'bg-primary/10 text-primary'
-                                    }`}>
-                                    {tab.count}
-                                </span>
+                                <tab.icon className={`h-6 w-6 mb-1 ${activeTab === tab.id ? 'fill-current' : ''}`} />
+                                {activeTab === tab.id && (
+                                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-t-full mx-4" />
+                                )}
                             </button>
                         ))}
                     </div>

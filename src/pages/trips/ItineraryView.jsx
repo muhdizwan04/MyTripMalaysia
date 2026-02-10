@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { Reorder } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { STATE_ACTIVITIES, TRANSPORT_ROUTES, DEFAULT_ACTIVITIES, TRAVEL_ADVICE, TRANSPORT_ESTIMATES, ROUTE_GUIDANCE } from '../../lib/constants';
-import { Clock, MapPin, DollarSign, Loader2, ArrowLeft, Bus, Car, Star, X, Info, Sparkles, ArrowRight, Users, Plus, Calendar } from 'lucide-react';
+import { Clock, MapPin, DollarSign, Loader2, ArrowLeft, Bus, Car, Star, X, Info, Sparkles, ArrowRight, Users, Plus, Calendar, ChevronUp, ChevronDown, AlertTriangle } from 'lucide-react';
 import TripMap from '../../components/trips/TripMap';
 import ActivityDetailsModal from '../../components/trips/ActivityDetailsModal';
 import { useCurrency } from '../../context/CurrencyContext';
@@ -20,6 +21,9 @@ export default function ItineraryView() {
     const [showAddMiniGemDialog, setShowAddMiniGemDialog] = useState(false);
     const [pendingMiniGem, setPendingMiniGem] = useState(null);
     const [miniGemDuration, setMiniGemDuration] = useState(1); // User's desired duration for mini-gem
+    const [itineraryAlert, setItineraryAlert] = useState(null);
+    const [showReorderConfirm, setShowReorderConfirm] = useState(false);
+    const [pendingReorderData, setPendingReorderData] = useState(null); // { dayIndex, newOrder }
     const mapRef = React.useRef(null);
 
     const scrollToMap = () => {
@@ -81,15 +85,23 @@ export default function ItineraryView() {
                     for (let day = 1; day <= days; day++) {
                         const stateIdx = Math.min(states.length - 1, Math.floor((day - 1) / daysPerState));
                         const state = states[stateIdx];
-                        const dailyPlan = [];
+                        let dailyPlan = [];
 
-                        // Slot definitions
-                        const slots = [
+                        // Default slots
+                        let slots = [
                             { time: '09:00', label: 'Morning Adventure', category: 'Nature', type: 'activity' },
                             { time: '13:00', label: 'Local Lunch', category: 'Food', type: 'food' },
                             { time: '15:30', label: 'Afternoon Discovery', category: 'Cultural', type: 'activity' },
                             { time: '19:30', label: 'Evening Vibe', category: 'Food', type: 'food' }
                         ];
+
+                        // Adjust slots for Last Day (Check-out first)
+                        if (day === days) {
+                            slots = [
+                                { time: '13:00', label: 'Farewell Lunch', category: 'Food', type: 'food' },
+                                { time: '15:00', label: 'Last Minute Shopping', category: 'Shopping', type: 'activity' }
+                            ];
+                        }
 
                         slots.forEach((slot, sIdx) => {
                             // Priority 1: User chose something for THIS DAY and roughly this time?
@@ -131,22 +143,63 @@ export default function ItineraryView() {
                             }
                         });
 
+                        // Standard Check-in/Check-out Logic
+                        const hotel = (tripData.accommodation && (tripData.accommodation[day] || tripData.accommodation[1])) || { name: 'Selected Hotel' };
+
+                        // Day 1: Check-in
+                        if (day === 1) {
+                            dailyPlan.push({
+                                id: `checkin-${day}`,
+                                type: 'accommodation',
+                                category: 'Logistics',
+                                name: `Check-in: ${hotel.name}`,
+                                time: '15:00',
+                                duration: 1,
+                                image: hotel.image || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&q=80&w=1000'
+                            });
+                        }
+
+                        // Last Day: Check-out (Must be first)
+                        if (day === days) {
+                            dailyPlan.push({
+                                id: `checkout-${day}`,
+                                type: 'accommodation',
+                                category: 'Logistics',
+                                name: `Check-out: ${hotel.name}`,
+                                time: '10:00',
+                                duration: 1,
+                                image: hotel.image || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&q=80&w=1000'
+                            });
+                        }
+
+                        // All Days except Last: Back to Hotel
+                        if (day < days) {
+                            dailyPlan.push({
+                                id: `back-${day}`,
+                                type: 'accommodation',
+                                category: 'Logistics',
+                                name: `Back to ${hotel.name}`,
+                                time: '22:00',
+                                duration: 0,
+                                image: hotel.image || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&q=80&w=1000'
+                            });
+                        }
+
                         // Append any user selected activities for this day that didn't match a slot
                         userSelectedActivities
                             .filter(a => a.day === day && !dailyPlan.find(dp => dp.id === a.id))
                             .forEach(a => {
-                                if (dailyPlan.length > 0) {
-                                    dailyPlan.push({
-                                        id: `trans-${day}-extra-${a.id}`,
-                                        type: 'transport',
-                                        method: tripData.transport === 'public' ? 'Public Transport' : 'Grab / Car',
-                                        duration: '20 mins',
-                                        price: tripData.transport === 'public' ? 5 : 18,
-                                        time: a.time
-                                    });
-                                }
                                 dailyPlan.push({ ...a, nearbySpots: getNearbySpots(state, a.id) });
                             });
+
+                        // Sort tasks by time
+                        dailyPlan.sort((a, b) => {
+                            if (!a.time) return 1;
+                            if (!b.time) return -1;
+                            const [h1, m1] = a.time.split(':').map(Number);
+                            const [h2, m2] = b.time.split(':').map(Number);
+                            return (h1 * 60 + m1) - (h2 * 60 + m2);
+                        });
 
                         generated.push({ day, state, activities: dailyPlan });
                     }
@@ -268,19 +321,115 @@ export default function ItineraryView() {
         setPendingMiniGem(null);
     };
 
-    // Handler to adjust activity duration
+    // Handler to move activity up or down
+    const handleMoveActivity = (dayIndex, activityIndex, direction) => {
+        const newItinerary = JSON.parse(JSON.stringify(itinerary));
+        const dayActivities = newItinerary[dayIndex].activities;
+
+        // Swap with previous or next activity
+        const targetIndex = activityIndex + direction; // -1 for up, +1 for down
+
+        // Check bounds
+        if (targetIndex < 0 || targetIndex >= dayActivities.length) return;
+
+        // Determine effective swap
+        // We need to find the correct index in the array, skipping 'transport' types for UI logic, 
+        // BUT the array contains transport items too.
+        // The UI renders transport items separately.
+        // However, simplify: Just swap in the array.
+        // If the adjacent item is a 'transport', we might need to swap past it or swap WITH it?
+        // Actually, transport items are usually between activities. 
+        // If we move Activity A down past Activity B, we might also need to move the Transport between A and B?
+        // This is complex.
+    };
+
+    const handleReorderActivities = (dayIndex, newOrder) => {
+        // Save original only if we don't have a pending one (first move in a session)
+        if (!pendingReorderData) {
+            setPendingReorderData({
+                dayIndex,
+                originalOrder: [...itinerary[dayIndex].activities]
+            });
+        }
+
+        const newItinerary = [...itinerary];
+        newItinerary[dayIndex].activities = newOrder;
+        setItinerary(newItinerary);
+
+        // We don't show the modal here yet to avoid interrupting the drag.
+        // It will be shown on onDragEnd.
+    };
+
+    const handleReorderConfirm = () => {
+        if (!pendingReorderData) return;
+
+        const { dayIndex } = pendingReorderData;
+        const newItinerary = [...itinerary];
+        const day = newItinerary[dayIndex];
+
+        // "Bring along logistics" - Recalculate transport and times
+        const activitiesOnly = day.activities.filter(a => a.type !== 'transport');
+
+        let dailyPlan = [];
+        let currentTime = activitiesOnly[0]?.time || '09:00';
+
+        activitiesOnly.forEach((act, idx) => {
+            if (idx > 0) {
+                // Add fresh transport item
+                dailyPlan.push({
+                    id: `trans-${day.day}-${idx}-${Date.now()}`,
+                    type: 'transport',
+                    method: tripData.transport === 'public' ? 'Public Transport' : 'Grab / Car',
+                    duration: '20 mins',
+                    price: tripData.transport === 'public' ? 5 : 18,
+                    time: currentTime
+                });
+            }
+
+            // Sync activity time based on previous activity duration (simple ripple)
+            act.time = currentTime;
+            dailyPlan.push(act);
+
+            // Calculate next start time
+            const [h, m] = currentTime.split(':').map(Number);
+            const duration = act.duration || 2;
+            const transportMinutes = idx < activitiesOnly.length - 1 ? 30 : 0; // 30 min buffer/transport
+            const totalMinutes = h * 60 + m + (duration * 60) + transportMinutes;
+
+            const nextH = Math.floor(totalMinutes / 60) % 24;
+            const nextM = totalMinutes % 60;
+            currentTime = `${String(nextH).padStart(2, '0')}:${String(nextM).padStart(2, '0')}`;
+        });
+
+        newItinerary[dayIndex].activities = dailyPlan;
+        setItinerary(newItinerary);
+        setPendingReorderData(null);
+        setShowReorderConfirm(false);
+
+        setItineraryAlert("Route updated & logistics synchronized! 🚚");
+        setTimeout(() => setItineraryAlert(null), 4000);
+    };
+
+    const handleReorderCancel = () => {
+        if (!pendingReorderData) return;
+
+        const { dayIndex, originalOrder } = pendingReorderData;
+        const newItinerary = [...itinerary];
+        newItinerary[dayIndex].activities = originalOrder;
+
+        setItinerary(newItinerary);
+        setPendingReorderData(null);
+        setShowReorderConfirm(false);
+    };
+
     const handleDurationChange = (dayIndex, activityIndex, newDuration) => {
         const newItinerary = JSON.parse(JSON.stringify(itinerary));
         const activity = newItinerary[dayIndex].activities[activityIndex];
         const oldDuration = activity.duration || 2;
 
-        // Update the activity's duration
         activity.duration = newDuration;
-
-        // Calculate time difference in minutes
         const timeDiffMinutes = (newDuration - oldDuration) * 60;
 
-        // Adjust all subsequent activities on that day
         for (let i = activityIndex + 1; i < newItinerary[dayIndex].activities.length; i++) {
             const nextActivity = newItinerary[dayIndex].activities[i];
             if (nextActivity.type !== 'transport' && nextActivity.time) {
@@ -292,7 +441,6 @@ export default function ItineraryView() {
                 nextActivity.time = `${String(newHours).padStart(2, '0')}:${String(newMins).padStart(2, '0')}`;
             }
         }
-
         setItinerary(newItinerary);
     };
 
@@ -388,238 +536,231 @@ export default function ItineraryView() {
                                     </div>
                                 </CardHeader>
                                 <CardContent className="px-0 relative p-0">
-                                    <div className="absolute left-7 top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary/20 via-primary/10 to-transparent"></div>
-                                    <div className="space-y-6">
-                                        {day.activities && day.activities.map((activity, aIdx) => (
-                                            <React.Fragment key={aIdx}>
-                                                <div className="relative pl-16">
-                                                    {activity.type === 'transport' ? (
-                                                        <div className="py-2 flex items-center gap-4 text-muted-foreground group">
-                                                            <div className="h-8 w-8 rounded-full bg-muted border-2 border-background flex items-center justify-center z-10 scale-90 -translate-x-1 group-hover:bg-primary/10 group-hover:border-primary/20 transition-all">
-                                                                {activity.method === 'Public Transport' ? <Bus className="h-4 w-4" /> : <Car className="h-4 w-4" />}
-                                                            </div>
-                                                            <div className="flex-1 border-b border-muted/50 pb-2">
-                                                                <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-0.5">{activity.method} • {activity.duration}</p>
-                                                                <p className="text-xs font-bold">Trip towards next destination</p>
-                                                            </div>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="group/item">
-                                                            {/* Step Indicator */}
-                                                            <div className="absolute left-[24px] top-6 h-3 w-3 rounded-full bg-primary ring-4 ring-background z-10 shadow-[0_0_15px_rgba(var(--primary),0.3)]"></div>
+                                    <div className="absolute left-[75px] top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary/20 via-primary/10 to-transparent"></div>
+                                    <Reorder.Group
+                                        axis="y"
+                                        values={day.activities || []}
+                                        onReorder={(newOrder) => handleReorderActivities(dIdx, newOrder)}
+                                        className="space-y-12"
+                                    >
+                                        {day.activities && day.activities.filter(a => a.type !== 'transport').map((activity, aIdx, filteredArr) => (
+                                            <Reorder.Item
+                                                key={activity.id + aIdx}
+                                                value={activity}
+                                                className="relative pl-28"
+                                                onDragEnd={() => {
+                                                    if (pendingReorderData) {
+                                                        setShowReorderConfirm(true);
+                                                    }
+                                                }}
+                                            >
+                                                <div className="group/item">
+                                                    {/* Time & Dot Indicator */}
+                                                    <div className="absolute left-2 top-6 w-14 text-right">
+                                                        <span className="text-xs font-black text-muted-foreground">{activity.time}</span>
+                                                    </div>
+                                                    <div className="absolute left-[71px] top-6 h-3 w-3 rounded-full bg-primary ring-4 ring-background z-10 shadow-[0_0_15px_rgba(var(--primary),0.3)]"></div>
 
-                                                            {/* Activity Card */}
-                                                            <div className="space-y-4">
-                                                                <div
-                                                                    className="bg-card p-6 rounded-[32px] border-2 border-muted hover:border-primary/30 hover:shadow-2xl hover:shadow-primary/5 transition-all flex flex-col md:flex-row gap-6 cursor-pointer relative"
-                                                                    onClick={() => setSelectedActivity(activity)}
-                                                                >
-                                                                    <button
-                                                                        className="absolute -right-2 -top-2 h-8 w-8 rounded-full bg-destructive text-white flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-all z-20 shadow-lg"
-                                                                        onClick={(e) => { e.stopPropagation(); handleRemoveActivity(dIdx, activity.id); }}
-                                                                    >
-                                                                        <X className="h-4 w-4" />
-                                                                    </button>
+                                                    {/* Activity Card */}
+                                                    <div className="space-y-4">
+                                                        <div
+                                                            className="bg-card p-6 rounded-[32px] border-2 border-muted hover:border-primary/30 hover:shadow-2xl hover:shadow-primary/5 transition-all flex flex-col md:flex-row gap-6 cursor-pointer relative"
+                                                            onClick={() => setSelectedActivity(activity)}
+                                                        >
+                                                            <button
+                                                                className="absolute -right-2 -top-2 h-8 w-8 rounded-full bg-destructive text-white flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-all z-20 shadow-lg"
+                                                                onClick={(e) => { e.stopPropagation(); handleRemoveActivity(dIdx, activity.id); }}
+                                                            >
+                                                                <X className="h-4 w-4" />
+                                                            </button>
 
-                                                                    {activity.image && (
-                                                                        <div className="w-full md:w-32 h-32 rounded-2xl overflow-hidden shrink-0 shadow-sm border-4 border-background">
-                                                                            <img src={activity.image} alt={activity.name} className="w-full h-full object-cover group-hover/item:scale-110 transition-transform duration-700" />
+                                                            {activity.image && (
+                                                                <div className="w-full md:w-32 h-32 rounded-2xl overflow-hidden shrink-0 shadow-sm border-4 border-background">
+                                                                    <img src={activity.image} alt={activity.name} className="w-full h-full object-cover group-hover/item:scale-110 transition-transform duration-700" />
+                                                                </div>
+                                                            )}
+
+                                                            <div className="flex-1 space-y-3">
+                                                                <div className="flex justify-between items-start">
+                                                                    <div>
+                                                                        <div className="flex items-center gap-2 mb-1">
+                                                                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{activity.category}</span>
                                                                         </div>
-                                                                    )}
-
-                                                                    <div className="flex-1 space-y-3">
-                                                                        <div className="flex justify-between items-start">
-                                                                            <div>
-                                                                                <div className="flex items-center gap-2 mb-1">
-                                                                                    <span className="text-[10px] font-black text-primary bg-primary/10 px-2 py-0.5 rounded-lg uppercase">{activity.time}</span>
-                                                                                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{activity.category}</span>
-                                                                                </div>
-                                                                                <h3 className="text-2xl font-black tracking-tight group-hover/item:text-primary transition-colors">{activity.name}</h3>
-                                                                            </div>
-                                                                            <div className="flex items-center gap-1.5 bg-yellow-400/10 text-yellow-700 px-3 py-1 rounded-full text-xs font-black ring-1 ring-yellow-400/20">
-                                                                                <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
-                                                                                {activity.rating || 4.7}
-                                                                            </div>
-                                                                        </div>
-
-                                                                        <div className="flex flex-wrap gap-4 pt-2">
-                                                                            <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
-                                                                                <DollarSign className="h-3.5 w-3.5 text-primary" />
-                                                                                {formatPrice(activity.price || 0)} / pax
-                                                                            </div>
-                                                                            <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
-                                                                                <Clock className="h-3.5 w-3.5 text-primary" />
-                                                                                <div className="flex items-center gap-1 bg-muted/30 rounded-lg px-2 py-1">
-                                                                                    <button
-                                                                                        onClick={(e) => {
-                                                                                            e.stopPropagation();
-                                                                                            const currentDuration = activity.duration || 2;
-                                                                                            if (currentDuration > 0.5) {
-                                                                                                handleDurationChange(dIdx, aIdx, currentDuration - 0.5);
-                                                                                            }
-                                                                                        }}
-                                                                                        className="h-5 w-5 rounded bg-white hover:bg-primary hover:text-white text-primary flex items-center justify-center transition-colors"
-                                                                                        title="Decrease duration"
-                                                                                    >
-                                                                                        <span className="text-xs font-black">-</span>
-                                                                                    </button>
-                                                                                    <input
-                                                                                        type="number"
-                                                                                        value={activity.duration || 2}
-                                                                                        onChange={(e) => {
-                                                                                            e.stopPropagation();
-                                                                                            const newVal = parseFloat(e.target.value);
-                                                                                            if (newVal > 0 && newVal <= 12) {
-                                                                                                handleDurationChange(dIdx, aIdx, newVal);
-                                                                                            }
-                                                                                        }}
-                                                                                        onClick={(e) => e.stopPropagation()}
-                                                                                        className="w-10 text-center bg-transparent font-bold text-xs outline-none"
-                                                                                        min="0.5"
-                                                                                        max="12"
-                                                                                        step="0.5"
-                                                                                    />
-                                                                                    <span className="text-xs">hrs</span>
-                                                                                    <button
-                                                                                        onClick={(e) => {
-                                                                                            e.stopPropagation();
-                                                                                            const currentDuration = activity.duration || 2;
-                                                                                            if (currentDuration < 12) {
-                                                                                                handleDurationChange(dIdx, aIdx, currentDuration + 0.5);
-                                                                                            }
-                                                                                        }}
-                                                                                        className="h-5 w-5 rounded bg-white hover:bg-primary hover:text-white text-primary flex items-center justify-center transition-colors"
-                                                                                        title="Increase duration"
-                                                                                    >
-                                                                                        <span className="text-xs font-black">+</span>
-                                                                                    </button>
-                                                                                </div>
-                                                                            </div>
-                                                                            <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
-                                                                                <MapPin className="h-3.5 w-3.5 text-primary" />
-                                                                                {activity.state}
-                                                                            </div>
-                                                                        </div>
+                                                                        <h3 className="text-2xl font-black tracking-tight group-hover/item:text-primary transition-colors">{activity.name}</h3>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-1.5 bg-yellow-400/10 text-yellow-700 px-3 py-1 rounded-full text-xs font-black ring-1 ring-yellow-400/20">
+                                                                        <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
+                                                                        {activity.rating || 4.7}
                                                                     </div>
                                                                 </div>
 
-                                                                {/* Nearby Suggestions Section */}
-                                                                {activity.nearbySpots?.length > 0 && (
-                                                                    <div className="pl-4 pb-4">
-                                                                        <div className="flex items-center gap-2 mb-3">
-                                                                            <Sparkles className="h-3.5 w-3.5 text-primary animate-pulse" />
-                                                                            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Nearby Mini-Gems</span>
-                                                                        </div>
-                                                                        <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
-                                                                            {activity.nearbySpots.map((spot, ridx) => (
-                                                                                <div
-                                                                                    key={ridx}
-                                                                                    className="shrink-0 w-56 bg-muted/20 hover:bg-muted/40 p-3 rounded-2xl border border-muted/50 transition-all flex gap-3 items-center group/spot relative"
-                                                                                >
-                                                                                    {/* Add Button */}
-                                                                                    <button
-                                                                                        onClick={(e) => {
-                                                                                            e.stopPropagation();
-                                                                                            handleAddMiniGemClick(spot, dIdx, aIdx);
-                                                                                        }}
-                                                                                        className="absolute -top-2 -right-2 h-7 w-7 rounded-full bg-primary text-white flex items-center justify-center shadow-lg hover:scale-110 transition-transform z-10"
-                                                                                        title="Add to itinerary"
-                                                                                    >
-                                                                                        <Plus className="h-4 w-4" />
-                                                                                    </button>
-
-                                                                                    <div
-                                                                                        className="flex gap-3 items-center flex-1 cursor-pointer"
-                                                                                        onClick={() => setSelectedActivity(spot)}
-                                                                                    >
-                                                                                        <img src={spot.image} className="h-12 w-12 rounded-xl object-cover shadow-sm" alt="" />
-                                                                                        <div className="flex-1 overflow-hidden">
-                                                                                            <p className="text-xs font-black truncate">{spot.name}</p>
-                                                                                            <div className="flex items-center gap-1">
-                                                                                                <Star className="h-2.5 w-2.5 fill-yellow-500 text-yellow-500" />
-                                                                                                <span className="text-[9px] font-bold text-muted-foreground">{spot.rating} • {spot.category}</span>
-                                                                                            </div>
-                                                                                        </div>
-                                                                                    </div>
-                                                                                </div>
-                                                                            ))}
-                                                                        </div>
+                                                                <div className="flex flex-wrap gap-4 pt-2">
+                                                                    <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
+                                                                        <DollarSign className="h-3.5 w-3.5 text-primary" />
+                                                                        {activity.category === 'Logistics' ? 'Included' : `${formatPrice(activity.price || 0)} / pax`}
                                                                     </div>
-                                                                )}
+                                                                    <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
+                                                                        <Clock className="h-3.5 w-3.5 text-primary" />
+                                                                        {activity.category !== 'Logistics' ? (
+                                                                            <div className="flex items-center gap-1 bg-muted/30 rounded-lg px-2 py-1">
+                                                                                <button
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        const currentDuration = activity.duration || 2;
+                                                                                        if (currentDuration > 0.5) {
+                                                                                            handleDurationChange(dIdx, aIdx, currentDuration - 0.5);
+                                                                                        }
+                                                                                    }}
+                                                                                    className="h-5 w-5 rounded bg-white hover:bg-primary hover:text-white text-primary flex items-center justify-center transition-colors"
+                                                                                    title="Decrease duration"
+                                                                                >
+                                                                                    <span className="text-xs font-black">-</span>
+                                                                                </button>
+                                                                                <input
+                                                                                    type="number"
+                                                                                    value={activity.duration || 2}
+                                                                                    onChange={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        const newVal = parseFloat(e.target.value);
+                                                                                        if (newVal > 0 && newVal <= 12) {
+                                                                                            handleDurationChange(dIdx, aIdx, newVal);
+                                                                                        }
+                                                                                    }}
+                                                                                    onClick={(e) => e.stopPropagation()}
+                                                                                    className="w-10 text-center bg-transparent font-bold text-xs outline-none"
+                                                                                    min="0.5"
+                                                                                    max="12"
+                                                                                    step="0.5"
+                                                                                />
+                                                                                <span className="text-xs">hrs</span>
+                                                                                <button
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        const currentDuration = activity.duration || 2;
+                                                                                        if (currentDuration < 12) {
+                                                                                            handleDurationChange(dIdx, aIdx, currentDuration + 0.5);
+                                                                                        }
+                                                                                    }}
+                                                                                    className="h-5 w-5 rounded bg-white hover:bg-primary hover:text-white text-primary flex items-center justify-center transition-colors"
+                                                                                    title="Increase duration"
+                                                                                >
+                                                                                    <span className="text-xs font-black">+</span>
+                                                                                </button>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
+                                                                                {activity.id === 'check-out' ? (
+                                                                                    <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-[10px] uppercase font-black">Departure</span>
+                                                                                ) : activity.id.startsWith('back-') ? (
+                                                                                    <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded text-[10px] uppercase font-black">Overnight • Rest</span>
+                                                                                ) : (
+                                                                                    <span className="bg-primary/10 text-primary px-2 py-0.5 rounded text-[10px] uppercase font-black">Settling In</span>
+                                                                                )}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
+                                                                        <MapPin className="h-3.5 w-3.5 text-primary" />
+                                                                        {activity.state}
+                                                                    </div>
+                                                                </div>
                                                             </div>
                                                         </div>
-                                                    )}
+
+                                                        {/* Nearby Suggestions Section */}
+                                                        {activity.nearbySpots?.length > 0 && (
+                                                            <div className="pl-4 pb-4">
+                                                                <div className="flex items-center gap-2 mb-3">
+                                                                    <Sparkles className="h-3.5 w-3.5 text-primary animate-pulse" />
+                                                                    <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Nearby Mini-Gems</span>
+                                                                </div>
+                                                                <div className="flex gap-4 overflow-x-auto pb-4 pt-4 no-scrollbar">
+                                                                    {activity.nearbySpots.map((spot, ridx) => (
+                                                                        <div
+                                                                            key={ridx}
+                                                                            className="shrink-0 w-56 bg-muted/20 hover:bg-muted/40 p-3 rounded-2xl border border-muted/50 transition-all flex gap-3 items-center group/spot relative"
+                                                                        >
+                                                                            {/* Add Button */}
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    handleAddMiniGemClick(spot, dIdx, aIdx);
+                                                                                }}
+                                                                                className="absolute -top-2 -right-2 h-7 w-7 rounded-full bg-primary text-white flex items-center justify-center shadow-lg hover:scale-110 transition-transform z-10"
+                                                                                title="Add to itinerary"
+                                                                            >
+                                                                                <Plus className="h-4 w-4" />
+                                                                            </button>
+
+                                                                            <div
+                                                                                className="flex gap-3 items-center flex-1 cursor-pointer"
+                                                                                onClick={() => setSelectedActivity(spot)}
+                                                                            >
+                                                                                <img src={spot.image} className="h-12 w-12 rounded-xl object-cover shadow-sm" alt="" />
+                                                                                <div className="flex-1 overflow-hidden">
+                                                                                    <p className="text-xs font-black truncate">{spot.name}</p>
+                                                                                    <div className="flex items-center gap-1">
+                                                                                        <Star className="h-2.5 w-2.5 fill-yellow-500 text-yellow-500" />
+                                                                                        <span className="text-[9px] font-bold text-muted-foreground">{spot.rating} • {spot.category}</span>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
 
-                                                {/* Route Guidance to Next Activity */}
-                                                {tripData.transportMode === 'public' && aIdx < (day.activities?.length || 0) - 1 && (() => {
-                                                    const nextActivity = day.activities[aIdx + 1];
-                                                    const category = activity.category || activity.type || 'default';
-                                                    const hasPublicTransport = ROUTE_GUIDANCE.publicTransportAvailable[category] !== false;
-
-                                                    if (hasPublicTransport) {
-                                                        const route = ROUTE_GUIDANCE.transitRoutes[category] || ROUTE_GUIDANCE.transitRoutes.default;
-                                                        const cost = ROUTE_GUIDANCE.publicTransportCost.medium;
-                                                        return (
-                                                            <div className="mt-4 mb-2 ml-0 bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-4">
-                                                                <div className="flex items-start gap-3">
-                                                                    <div className="h-10 w-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0">
+                                                {/* Static Transport Card (Connector) */}
+                                                {aIdx < filteredArr.length - 1 && (
+                                                    <div className="py-8 ml-0">
+                                                        {tripData.transportMode === 'public' ? (
+                                                            <div className="bg-emerald-50/50 border-2 border-dashed border-emerald-200 rounded-[32px] p-5 transition-all">
+                                                                <div className="flex items-start gap-4">
+                                                                    <div className="h-10 w-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-md">
                                                                         <Bus className="h-5 w-5" />
                                                                     </div>
                                                                     <div className="flex-1">
-                                                                        <div className="flex items-center justify-between mb-1">
-                                                                            <p className="text-xs font-black text-emerald-900 uppercase tracking-wider">Public Transport</p>
-                                                                            <span className="text-xs font-black text-emerald-700">RM {cost.toFixed(2)}</span>
+                                                                        <div className="flex items-center justify-between mb-0.5">
+                                                                            <p className="text-[9px] font-black text-emerald-900 uppercase tracking-[0.2em]">Public Transport</p>
+                                                                            <span className="text-[10px] font-black text-emerald-700">RM 5.00</span>
                                                                         </div>
-                                                                        <p className="text-sm font-bold text-emerald-800 leading-relaxed">
-                                                                            {route}
-                                                                        </p>
-                                                                        <div className="flex items-center gap-2 mt-2 text-xs text-emerald-600 font-bold">
-                                                                            <MapPin className="h-3 w-3" />
-                                                                            <span>To: {nextActivity.name}</span>
-                                                                        </div>
+                                                                        <h4 className="text-sm font-black text-emerald-800">Trip towards next stop</h4>
                                                                     </div>
                                                                 </div>
                                                             </div>
-                                                        );
-                                                    } else {
-                                                        // GrabCar estimate
-                                                        const grabCost = ROUTE_GUIDANCE.grabCar.baseFare + (ROUTE_GUIDANCE.grabCar.perKm * ROUTE_GUIDANCE.grabCar.avgDistance);
-                                                        return (
-                                                            <div className="mt-4 mb-2 ml-0 bg-orange-50 border-2 border-orange-200 rounded-2xl p-4">
-                                                                <div className="flex items-start gap-3">
-                                                                    <div className="h-10 w-10 rounded-xl bg-orange-500 text-white flex items-center justify-center shrink-0">
+                                                        ) : (
+                                                            <div className="bg-orange-50/50 border-2 border-dashed border-orange-200 rounded-[32px] p-5 transition-all">
+                                                                <div className="flex items-start gap-4">
+                                                                    <div className="h-10 w-10 rounded-xl bg-orange-500 text-white flex items-center justify-center shrink-0 shadow-md">
                                                                         <Car className="h-5 w-5" />
                                                                     </div>
                                                                     <div className="flex-1">
-                                                                        <div className="flex items-center justify-between mb-1">
-                                                                            <p className="text-xs font-black text-orange-900 uppercase tracking-wider">GrabCar</p>
-                                                                            <span className="text-xs font-black text-orange-700">~RM {grabCost.toFixed(2)}</span>
+                                                                        <div className="flex items-center justify-between mb-0.5">
+                                                                            <p className="text-[9px] font-black text-orange-900 uppercase tracking-[0.2em]">Grab / Car</p>
+                                                                            <span className="text-[10px] font-black text-orange-700">~RM 18.00</span>
                                                                         </div>
-                                                                        <p className="text-sm font-bold text-orange-800">
-                                                                            {ROUTE_GUIDANCE.transitRoutes[category]}
-                                                                        </p>
-                                                                        <div className="flex items-center gap-2 mt-2 text-xs text-orange-600 font-bold">
-                                                                            <MapPin className="h-3 w-3" />
-                                                                            <span>To: {nextActivity.name}</span>
-                                                                        </div>
+                                                                        <h4 className="text-sm font-black text-orange-800">Trip towards next stop</h4>
                                                                     </div>
                                                                 </div>
                                                             </div>
-                                                        );
-                                                    }
-                                                })()}
-                                            </React.Fragment>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </Reorder.Item>
                                         ))}
-                                    </div>
+                                    </Reorder.Group>
                                 </CardContent>
                             </Card>
-                        )) : (
-                            <div className="py-20 text-center">
-                                <h3 className="text-2xl font-black opacity-40">No itinerary generated.</h3>
-                                <Button onClick={() => navigate('/trips/create')} className="mt-4 rounded-xl">Try Re-building</Button>
-                            </div>
-                        )}
+                        ))
+                            : (
+                                <div className="py-20 text-center">
+                                    <h3 className="text-2xl font-black opacity-40">No itinerary generated.</h3>
+                                    <Button onClick={() => navigate('/trips/create')} className="mt-4 rounded-xl">Try Re-building</Button>
+                                </div>
+                            )}
                     </div>
                 </div>
 
@@ -849,106 +990,156 @@ export default function ItineraryView() {
                         </Card>
                     </div>
                 </div>
-            </div>
 
-            <ActivityDetailsModal
-                isOpen={!!selectedActivity}
-                onClose={() => setSelectedActivity(null)}
-                activity={selectedActivity}
-            />
+                <ActivityDetailsModal
+                    isOpen={!!selectedActivity}
+                    onClose={() => setSelectedActivity(null)}
+                    activity={selectedActivity}
+                />
 
-            {/* Mini-Gem Addition Confirmation Dialog */}
-            {showAddMiniGemDialog && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-[32px] p-8 max-w-md w-full shadow-2xl">
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center">
-                                <Info className="h-6 w-6 text-primary" />
-                            </div>
-                            <h3 className="text-2xl font-black tracking-tight">Add to Itinerary?</h3>
-                        </div>
+                {/* Mini-Gem Addition Confirmation Dialog */}
+                {
+                    showAddMiniGemDialog && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-[32px] p-8 max-w-md w-full shadow-2xl">
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+                                        <Info className="h-6 w-6 text-primary" />
+                                    </div>
+                                    <h3 className="text-2xl font-black tracking-tight">Add to Itinerary?</h3>
+                                </div>
 
-                        {pendingMiniGem && (
-                            <>
-                                <div className="mb-4 p-4 bg-muted/20 rounded-2xl">
-                                    <p className="text-sm font-bold mb-3">Adding: {pendingMiniGem.spot.name}</p>
+                                {pendingMiniGem && (
+                                    <>
+                                        <div className="mb-4 p-4 bg-muted/20 rounded-2xl">
+                                            <p className="text-sm font-bold mb-3">Adding: {pendingMiniGem.spot.name}</p>
 
-                                    {/* Duration Input */}
-                                    <div className="mb-3">
-                                        <label className="block text-xs font-bold text-muted-foreground mb-2">
-                                            How long do you want to spend here?
-                                        </label>
-                                        <div className="flex items-center gap-2 bg-white rounded-lg p-2">
-                                            <button
-                                                onClick={() => {
-                                                    if (miniGemDuration > 0.5) {
-                                                        setMiniGemDuration(miniGemDuration - 0.5);
-                                                    }
-                                                }}
-                                                className="h-8 w-8 rounded bg-muted hover:bg-primary hover:text-white text-primary flex items-center justify-center transition-colors"
-                                            >
-                                                <span className="text-sm font-black">-</span>
-                                            </button>
-                                            <input
-                                                type="number"
-                                                value={miniGemDuration}
-                                                onChange={(e) => {
-                                                    const val = parseFloat(e.target.value);
-                                                    if (val > 0 && val <= 8) {
-                                                        setMiniGemDuration(val);
-                                                    }
-                                                }}
-                                                className="flex-1 text-center font-bold text-sm outline-none"
-                                                min="0.5"
-                                                max="8"
-                                                step="0.5"
-                                            />
-                                            <span className="text-sm font-bold">hours</span>
-                                            <button
-                                                onClick={() => {
-                                                    if (miniGemDuration < 8) {
-                                                        setMiniGemDuration(miniGemDuration + 0.5);
-                                                    }
-                                                }}
-                                                className="h-8 w-8 rounded bg-muted hover:bg-primary hover:text-white text-primary flex items-center justify-center transition-colors"
-                                            >
-                                                <span className="text-sm font-black">+</span>
-                                            </button>
+                                            {/* Duration Input */}
+                                            <div className="mb-3">
+                                                <label className="block text-xs font-bold text-muted-foreground mb-2">
+                                                    How long do you want to spend here?
+                                                </label>
+                                                <div className="flex items-center gap-2 bg-white rounded-lg p-2">
+                                                    <button
+                                                        onClick={() => {
+                                                            if (miniGemDuration > 0.5) {
+                                                                setMiniGemDuration(miniGemDuration - 0.5);
+                                                            }
+                                                        }}
+                                                        className="h-8 w-8 rounded bg-muted hover:bg-primary hover:text-white text-primary flex items-center justify-center transition-colors"
+                                                    >
+                                                        <span className="text-sm font-black">-</span>
+                                                    </button>
+                                                    <input
+                                                        type="number"
+                                                        value={miniGemDuration}
+                                                        onChange={(e) => {
+                                                            const val = parseFloat(e.target.value);
+                                                            if (val > 0 && val <= 8) {
+                                                                setMiniGemDuration(val);
+                                                            }
+                                                        }}
+                                                        className="flex-1 text-center font-bold text-sm outline-none"
+                                                        min="0.5"
+                                                        max="8"
+                                                        step="0.5"
+                                                    />
+                                                    <span className="text-sm font-bold">hours</span>
+                                                    <button
+                                                        onClick={() => {
+                                                            if (miniGemDuration < 8) {
+                                                                setMiniGemDuration(miniGemDuration + 0.5);
+                                                            }
+                                                        }}
+                                                        className="h-8 w-8 rounded bg-muted hover:bg-primary hover:text-white text-primary flex items-center justify-center transition-colors"
+                                                    >
+                                                        <span className="text-sm font-black">+</span>
+                                                    </button>
+                                                </div>
+                                            </div>
                                         </div>
+
+                                        {/* Warning Message */}
+                                        <div className="mb-6 p-4 bg-orange-50 border-2 border-orange-200 rounded-2xl">
+                                            <p className="text-xs text-orange-800 leading-relaxed font-bold">
+                                                ⚠️ Adding this mini-gem will adjust the timing of all subsequent activities on this day.
+                                                Activities will be pushed back by <span className="text-orange-600 font-black">{miniGemDuration} hour(s)</span>.
+                                            </p>
+                                        </div>
+                                    </>
+                                )}
+
+                                <div className="flex gap-3">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => {
+                                            setShowAddMiniGemDialog(false);
+                                            setPendingMiniGem(null);
+                                        }}
+                                        className="flex-1 h-14 rounded-2xl"
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        onClick={confirmAddMiniGem}
+                                        className="flex-1 h-14 rounded-2xl"
+                                    >
+                                        Add Anyway
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    )
+                }
+                {/* Custom Toast Notification */}
+                {
+                    itineraryAlert && (
+                        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[60] animate-in fade-in slide-in-from-bottom-4 duration-300">
+                            <div className="bg-foreground text-background px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 border border-white/10 backdrop-blur-md">
+                                <AlertTriangle className="h-4 w-4 text-yellow-400" />
+                                <span className="text-sm font-black tracking-tight">{itineraryAlert}</span>
+                            </div>
+                        </div>
+                    )
+                }
+
+                {/* Reorder Confirmation Dialog */}
+                {
+                    showReorderConfirm && (
+                        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[70] p-4 animate-in fade-in duration-300">
+                            <div className="bg-white rounded-[40px] p-10 max-w-lg w-full shadow-[0_32px_64px_-16px_rgba(0,0,0,0.3)] border border-muted scale-in-center animate-in zoom-in-95 duration-300">
+                                <div className="flex flex-col items-center text-center space-y-6">
+                                    <div className="h-24 w-24 rounded-[32px] bg-primary/10 flex items-center justify-center animate-bounce">
+                                        <Sparkles className="h-12 w-12 text-primary" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <h3 className="text-3xl font-black tracking-tight text-foreground">Optimize Route?</h3>
+                                        <p className="text-muted-foreground font-medium leading-relaxed">
+                                            You've rearranged your activities. To maintain a smooth trip, we'll sync the transport logistics between your new destinations.
+                                        </p>
+                                    </div>
+
+                                    <div className="w-full space-y-3 pt-4">
+                                        <Button
+                                            onClick={handleReorderConfirm}
+                                            className="w-full h-16 rounded-3xl font-black text-lg shadow-xl shadow-primary/20 flex items-center justify-center gap-3 transition-all active:scale-95"
+                                        >
+                                            <Sparkles className="h-5 w-5" /> APPLY CHANGES & SYNC
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            onClick={handleReorderCancel}
+                                            className="w-full h-16 rounded-3xl font-black text-lg border-2 hover:bg-muted/50 transition-all active:scale-95"
+                                        >
+                                            REVERT ORDER
+                                        </Button>
                                     </div>
                                 </div>
-
-                                {/* Warning Message */}
-                                <div className="mb-6 p-4 bg-orange-50 border-2 border-orange-200 rounded-2xl">
-                                    <p className="text-xs text-orange-800 leading-relaxed font-bold">
-                                        ⚠️ Adding this mini-gem will adjust the timing of all subsequent activities on this day.
-                                        Activities will be pushed back by <span className="text-orange-600 font-black">{miniGemDuration} hour(s)</span>.
-                                    </p>
-                                </div>
-                            </>
-                        )}
-
-                        <div className="flex gap-3">
-                            <Button
-                                variant="outline"
-                                onClick={() => {
-                                    setShowAddMiniGemDialog(false);
-                                    setPendingMiniGem(null);
-                                }}
-                                className="flex-1 h-14 rounded-2xl"
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                onClick={confirmAddMiniGem}
-                                className="flex-1 h-14 rounded-2xl"
-                            >
-                                Add Anyway
-                            </Button>
+                            </div>
                         </div>
-                    </div>
-                </div>
-            )}
-        </div >
+                    )
+                }
+            </div>
+        </div>
     );
 }
