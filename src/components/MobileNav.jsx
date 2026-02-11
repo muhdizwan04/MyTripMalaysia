@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Home, Map, DollarSign, User, PlusCircle } from 'lucide-react';
+import { Home, Map, DollarSign, User, PlusCircle, Train } from 'lucide-react';
 import { clsx } from 'clsx';
 
 export function MobileNav() {
@@ -19,14 +19,14 @@ export function MobileNav() {
                 </NavLink>
 
                 <NavLink
-                    to="/trips"
+                    to="/transport"
                     className={({ isActive }) => clsx(
                         "flex flex-col items-center justify-center h-full gap-1",
                         isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
                     )}
                 >
-                    <Map className="h-5 w-5" />
-                    <span className="text-[10px] font-medium">Trips</span>
+                    <Train className="h-5 w-5" />
+                    <span className="text-[10px] font-medium">Transport</span>
                 </NavLink>
 
                 <NavLink
@@ -40,14 +40,14 @@ export function MobileNav() {
                 </NavLink>
 
                 <NavLink
-                    to="/trips/expenses"
+                    to="/trips"
                     className={({ isActive }) => clsx(
                         "flex flex-col items-center justify-center h-full gap-1",
                         isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
                     )}
                 >
-                    <DollarSign className="h-5 w-5" />
-                    <span className="text-[10px] font-medium">Expenses</span>
+                    <Map className="h-5 w-5" />
+                    <span className="text-[10px] font-medium">Trips</span>
                 </NavLink>
 
                 <NavLink

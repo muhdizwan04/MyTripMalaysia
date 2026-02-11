@@ -1,71 +1,130 @@
-import React, { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Search, MapPin, Clock, Tag } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { ArrowLeft, Search, MapPin, Clock, Tag, Star, X, Layers } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/Card';
+import { fetchShops, fetchAttractionById } from '../lib/api';
 
-// Mock data - user will populate later
-const MALL_DATA = {
-    1: {
-        name: "Pavilion KL",
-        location: "Bukit Bintang, Kuala Lumpur",
-        hours: "10 AM - 10 PM",
-        shops: [
-            { id: 1, name: "Zara", floor: "Ground Floor", category: "Fashion", image: "https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?auto=format&fit=crop&w=500&q=80" },
-            { id: 2, name: "Uniqlo", floor: "Level 1", category: "Fashion", image: "https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=500&q=80" },
-            { id: 3, name: "Apple Store", floor: "Level 2", category: "Electronics", image: "https://images.unsplash.com/photo-1621768216002-5ac171876625?auto=format&fit=crop&w=500&q=80" },
-            { id: 4, name: "Sephora", floor: "Ground Floor", category: "Beauty", image: "https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=500&q=80" },
-            { id: 5, name: "Din Tai Fung", floor: "Level 6", category: "Restaurant", image: "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=500&q=80" },
-            { id: 6, name: "Popular Bookstore", floor: "Level 3", category: "Books", image: "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=500&q=80" },
-            { id: 7, name: "Cotton On", floor: "Level 1", category: "Fashion", image: "https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?auto=format&fit=crop&w=500&q=80" },
-            { id: 8, name: "Samsung Store", floor: "Level 2", category: "Electronics", image: "https://images.unsplash.com/photo-1610457167756-ad4b6b15d9a8?auto=format&fit=crop&w=500&q=80" },
-        ]
-    },
-    2: {
-        name: "Sunway Pyramid",
-        location: "Subang Jaya, Selangor",
-        hours: "10 AM - 10 PM",
-        shops: [
-            { id: 1, name: "H&M", floor: "Ground Floor", category: "Fashion", image: "https://images.unsplash.com/photo-1445205170230-053b83016050?auto=format&fit=crop&w=500&q=80" },
-            { id: 2, name: "Starbucks", floor: "Lower Ground", category: "Cafe", image: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbd?auto=format&fit=crop&w=500&q=80" },
-            { id: 3, name: "Guardian", floor: "Level 1", category: "Health", image: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=500&q=80" },
-            { id: 4, name: "Toys R Us", floor: "Level 2", category: "Toys", image: "https://images.unsplash.com/photo-1560628861-dcf7b8d8c58f?auto=format&fit=crop&w=500&q=80" },
-        ]
-    },
-    // Default for other malls
-    default: {
-        name: "Shopping Mall",
-        location: "Malaysia",
-        hours: "10 AM - 10 PM",
-        shops: [
-            { id: 1, name: "Shop 1", floor: "Ground Floor", category: "Fashion", image: "https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?auto=format&fit=crop&w=500&q=80" },
-            { id: 2, name: "Shop 2", floor: "Level 1", category: "Electronics", image: "https://images.unsplash.com/photo-1498049794561-7780e7231661?auto=format&fit=crop&w=500&q=80" },
-            { id: 3, name: "Shop 3", floor: "Level 2", category: "Restaurant", image: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=500&q=80" },
-        ]
-    }
+// Shop Details Modal
+const ShopModal = ({ shop, onClose }) => {
+    if (!shop) return null;
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white w-full max-w-sm rounded-[32px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+                <div className="relative h-56">
+                    <img
+                        src={shop.image_url || shop.image || "https://images.unsplash.com/photo-1519500099198-c185fba3b7e5?auto=format&fit=crop&w=500&q=80"}
+                        alt={shop.name}
+                        className="w-full h-full object-cover"
+                    />
+                    <button
+                        onClick={onClose}
+                        className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full transition-colors backdrop-blur-md"
+                    >
+                        <X size={20} />
+                    </button>
+                </div>
+                <div className="p-6">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] px-2 py-1 bg-primary/10 text-primary rounded-full font-bold uppercase tracking-wider">{shop.category}</span>
+                        <div className="flex items-center gap-1 text-yellow-500">
+                            <Star className="h-3 w-3 fill-current" />
+                            <span className="text-xs font-black">{shop.rating || '4.5'}</span>
+                        </div>
+                    </div>
+                    <h2 className="text-2xl font-black mb-1">{shop.name}</h2>
+                    <div className="flex items-center gap-2 text-muted-foreground mb-4">
+                        <Layers className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-bold">Level: {shop.floor || 'N/A'}</span>
+                    </div>
+
+                    <p className="text-sm text-gray-600 mb-6 leading-relaxed">
+                        {shop.description || `Visit ${shop.name} for the best ${shop.category.toLowerCase()} experience. Located at ${shop.floor}.`}
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-gray-50 p-3 rounded-2xl">
+                            <span className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Opening Hours</span>
+                            <span className="text-xs font-bold text-gray-800">10:00 AM - 10:00 PM</span>
+                        </div>
+                        <div className="bg-gray-50 p-3 rounded-2xl">
+                            <span className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Contact</span>
+                            <span className="text-xs font-bold text-gray-800">+60 3-1234 5678</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 };
 
 export default function MallDetailsPage() {
     const navigate = useNavigate();
     const { mallId } = useParams();
+    const location = useLocation();
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [selectedFloor, setSelectedFloor] = useState('all');
 
-    const mallData = MALL_DATA[mallId] || MALL_DATA.default;
+    const [mallInfo, setMallInfo] = useState(location.state?.mall || null);
+    const [shops, setShops] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [selectedShop, setSelectedShop] = useState(null);
 
-    // Get unique categories and floors
-    const categories = ['all', ...new Set(mallData.shops.map(shop => shop.category))];
-    const floors = ['all', ...new Set(mallData.shops.map(shop => shop.floor))];
+    // Fetch mall and shops on mount
+    useEffect(() => {
+        const loadPageData = async () => {
+            console.log('MallDetailsPage: Loading data for mallId:', mallId);
+            try {
+                setLoading(true);
 
-    const filteredShops = mallData.shops.filter(shop => {
-        if (selectedCategory !== 'all' && shop.category !== selectedCategory) return false;
-        if (selectedFloor !== 'all' && shop.floor !== selectedFloor) return false;
-        if (searchQuery.trim()) {
-            const query = searchQuery.toLowerCase();
-            return shop.name.toLowerCase().includes(query) || shop.category.toLowerCase().includes(query);
+                // Fetch Mall Details if not in state
+                const mallPromise = !mallInfo ? fetchAttractionById(mallId) : Promise.resolve(mallInfo);
+
+                // Fetch Shops
+                const shopsPromise = fetchShops(mallId);
+
+                const [mallData, shopsData] = await Promise.all([mallPromise, shopsPromise]);
+
+                console.log(`MallDetailsPage: Fetched mall:`, mallData);
+                console.log(`MallDetailsPage: Fetched ${shopsData.length} shops:`, shopsData);
+
+                setMallInfo(mallData);
+                setShops(shopsData);
+            } catch (error) {
+                console.error('MallDetailsPage: Error loading data:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadPageData();
+    }, [mallId, mallInfo]);
+
+    // Group shops by category
+    const groupedShops = shops.reduce((acc, shop) => {
+        const category = shop.category || 'Other';
+        const floor = shop.floor || 'Other';
+
+        if (!acc[category]) acc[category] = [];
+
+        // Apply filters
+        const matchesSearch = !searchQuery.trim() ||
+            shop.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            category.toLowerCase().includes(searchQuery.toLowerCase());
+
+        const matchesCategory = selectedCategory === 'all' || category === selectedCategory;
+        const matchesFloor = selectedFloor === 'all' || floor === selectedFloor;
+
+        if (matchesSearch && matchesCategory && matchesFloor) {
+            acc[category].push(shop);
         }
-        return true;
-    });
+        return acc;
+    }, {});
+
+    // Get unique categories and floors for filters
+    const categoriesList = ['all', ...new Set(shops.map(shop => shop.category || 'Other'))];
+    const floorsList = ['all', ...new Set(shops.map(shop => shop.floor || 'Other'))];
+
+    const sortedCategories = Object.keys(groupedShops).sort();
 
     return (
         <div className="min-h-screen bg-batik pb-24">
@@ -76,15 +135,15 @@ export default function MallDetailsPage() {
                         <ArrowLeft className="h-5 w-5" />
                         <span className="text-sm font-bold">Back to Shopping</span>
                     </button>
-                    <h1 className="text-4xl font-black tracking-tighter mb-2">{mallData.name}</h1>
+                    <h1 className="text-4xl font-black tracking-tighter mb-2">{mallInfo?.name || "Shopping Mall"}</h1>
                     <div className="space-y-1">
                         <div className="flex items-center gap-2 text-muted-foreground">
                             <MapPin className="h-4 w-4" />
-                            <span className="text-sm font-medium">{mallData.location}</span>
+                            <span className="text-sm font-medium">{mallInfo?.location || mallInfo?.state || "Unknown Location"}</span>
                         </div>
                         <div className="flex items-center gap-2 text-muted-foreground">
                             <Clock className="h-4 w-4" />
-                            <span className="text-sm font-medium">{mallData.hours}</span>
+                            <span className="text-sm font-medium">{mallInfo?.hours || "10 AM - 10 PM"}</span>
                         </div>
                     </div>
                 </div>
@@ -104,51 +163,61 @@ export default function MallDetailsPage() {
 
                     <div className="grid grid-cols-2 gap-3">
                         <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} className="text-sm font-black px-4 py-3 rounded-2xl border-2 border-muted/50 bg-white outline-none">
-                            {categories.map(cat => (
+                            {categoriesList.map(cat => (
                                 <option key={cat} value={cat}>{cat === 'all' ? 'All Categories' : cat}</option>
                             ))}
                         </select>
 
                         <select value={selectedFloor} onChange={(e) => setSelectedFloor(e.target.value)} className="text-sm font-black px-4 py-3 rounded-2xl border-2 border-muted/50 bg-white outline-none">
-                            {floors.map(floor => (
+                            {floorsList.map(floor => (
                                 <option key={floor} value={floor}>{floor === 'all' ? 'All Floors' : floor}</option>
                             ))}
                         </select>
                     </div>
                 </div>
 
-                {/* Shop Results */}
-                <div className="mb-4">
-                    <p className="text-sm font-bold text-muted-foreground">
-                        {filteredShops.length} shop{filteredShops.length !== 1 ? 's' : ''} found
-                    </p>
-                </div>
-
-                <div className="space-y-4">
-                    {filteredShops.length > 0 ? (
-                        filteredShops.map((shop) => (
-                            <Card key={shop.id} className="overflow-hidden cursor-pointer group border-2 border-white/50 hover:shadow-xl transition-all rounded-[28px]">
-                                <CardContent className="p-0">
-                                    <div className="flex gap-4">
-                                        <div className="w-28 h-28 shrink-0 relative overflow-hidden">
-                                            <img src={shop.image} alt={shop.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                                        </div>
-                                        <div className="flex-1 py-3 pr-4">
-                                            <h4 className="font-black text-sm mb-1">{shop.name}</h4>
-                                            <div className="flex items-center gap-1 mb-2">
-                                                <MapPin className="h-3 w-3 text-primary" />
-                                                <span className="text-[10px] font-bold text-muted-foreground">{shop.floor}</span>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <div className="flex items-center gap-1">
-                                                    <Tag className="h-3 w-3 text-primary" />
-                                                    <span className="text-[10px] px-2 py-1 bg-primary/10 text-primary rounded-full font-bold">{shop.category}</span>
-                                                </div>
-                                            </div>
-                                        </div>
+                {/* Shop Results Grouped by Category */}
+                <div className="space-y-8">
+                    {sortedCategories.length > 0 ? (
+                        sortedCategories.map(category => (
+                            groupedShops[category].length > 0 && (
+                                <div key={category} className="space-y-4">
+                                    <h3 className="text-xl font-black flex items-center gap-2 px-2 text-primary">
+                                        <Tag size={20} />
+                                        {category}
+                                    </h3>
+                                    <div className="space-y-4">
+                                        {groupedShops[category].map((shop) => (
+                                            <Card
+                                                key={shop.id}
+                                                onClick={() => setSelectedShop(shop)}
+                                                className="overflow-hidden cursor-pointer group border-2 border-white/50 hover:shadow-xl transition-all rounded-[28px]"
+                                            >
+                                                <CardContent className="p-0">
+                                                    <div className="flex gap-4">
+                                                        <div className="w-28 h-28 shrink-0 relative overflow-hidden">
+                                                            <img src={shop.image_url || shop.image || "https://images.unsplash.com/photo-1519500099198-c185fba3b7e5?auto=format&fit=crop&w=500&q=80"} alt={shop.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                                        </div>
+                                                        <div className="flex-1 py-3 pr-4">
+                                                            <h4 className="font-black text-sm mb-1">{shop.name}</h4>
+                                                            <div className="flex items-center gap-1 mb-2">
+                                                                <Layers className="h-3 w-3 text-primary" />
+                                                                <span className="text-[10px] font-bold text-muted-foreground">Level: {shop.floor || 'N/A'}</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="flex items-center gap-1">
+                                                                    <Tag className="h-3 w-3 text-primary" />
+                                                                    <span className="text-[10px] px-2 py-1 bg-primary/10 text-primary rounded-full font-bold">{shop.category}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        ))}
                                     </div>
-                                </CardContent>
-                            </Card>
+                                </div>
+                            )
                         ))
                     ) : (
                         <div className="text-center py-20 bg-muted/10 rounded-3xl">
@@ -159,6 +228,11 @@ export default function MallDetailsPage() {
                     )}
                 </div>
             </div>
+
+            {/* Modal */}
+            {selectedShop && (
+                <ShopModal shop={selectedShop} onClose={() => setSelectedShop(null)} />
+            )}
         </div>
     );
 }

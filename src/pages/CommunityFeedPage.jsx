@@ -1,17 +1,51 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Search } from 'lucide-react';
 import FeedPost from '../components/feed/FeedPost';
 import CreatePostModal from '../components/feed/CreatePostModal';
-import { FEED_POSTS } from '../lib/constants';
+import { fetchCommunityPosts } from '../lib/api';
 
 export default function CommunityFeedPage() {
     const navigate = useNavigate();
     const [searchQuery, setSearchQuery] = useState('');
     const [activeFilter, setActiveFilter] = useState('all');
     const [showCreatePost, setShowCreatePost] = useState(false);
+    const [posts, setPosts] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-    const filteredPosts = FEED_POSTS.filter(post => {
+    useEffect(() => {
+        const loadPosts = async () => {
+            try {
+                setLoading(true);
+                const data = await fetchCommunityPosts();
+                // Transform backend data to match FeedPost component format
+                const transformedPosts = data.map(post => ({
+                    id: post.id,
+                    placeName: post.location || post.attraction_reference || 'Unknown Location',
+                    location: post.location || '',
+                    state: post.state || 'Malaysia',
+                    image: post.image_url,
+                    description: post.caption || '',
+                    type: post.tags?.includes('FOOD') || post.tags?.includes('KL FOOD') ? 'food' : 'scenery',
+                    likes: post.likes || 0,
+                    shares: post.shares || 0,
+                    comments: post.comments || 0,
+                    username: post.author || 'Anonymous',
+                    userAvatar: post.author_image || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100',
+                    isVerified: false,
+                    tags: post.tags || []
+                }));
+                setPosts(transformedPosts);
+            } catch (error) {
+                console.error('Failed to load community posts:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadPosts();
+    }, []);
+
+    const filteredPosts = posts.filter(post => {
         if (activeFilter !== 'all' && post.type !== activeFilter) {
             return false;
         }
@@ -73,7 +107,12 @@ export default function CommunityFeedPage() {
 
                 {/* Feed Posts */}
                 <div className="space-y-6">
-                    {filteredPosts.length > 0 ? (
+                    {loading ? (
+                        <div className="text-center py-20">
+                            <div className="animate-spin h-12 w-12 border-4 border-primary border-t-transparent rounded-full mx-auto mb-3"></div>
+                            <p className="text-sm font-medium text-muted-foreground">Loading posts...</p>
+                        </div>
+                    ) : filteredPosts.length > 0 ? (
                         filteredPosts.map((post) => (
                             <FeedPost key={post.id} post={post} />
                         ))

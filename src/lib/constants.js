@@ -119,25 +119,6 @@ export const STATE_ACTIVITIES = {
                 { user: "Loke", rating: 4, text: "Watch out for the monkeys! They will take your food and bags." },
                 { user: "Divya", rating: 5, text: "The architectural colors are stunning since the paint job." }
             ]
-        },
-        {
-            id: 's3', name: "I-City Theme Park", type: "activity", category: "Nightlife", price: 50, rating: 4.3,
-            coords: [3.0648, 101.4851], image: "https://images.unsplash.com/photo-1583248356463-6e7e1532130e?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-            description: "City of Digital Lights with amazing LED displays and a Snow Walk.",
-            duration: 180, isIndoor: false, bestTime: "Night"
-        },
-        {
-            id: 's4', name: "Village Park Nasi Lemak", type: "food", category: "Viral Food", price: 25, rating: 4.8,
-            coords: [3.1307, 101.6225], image: "https://images.unsplash.com/photo-1574484284002-952d92456975?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-            description: "Legitimately the best Nasi Lemak Ayam Goreng in the country.",
-            duration: 60, isIndoor: true, bestTime: "Morning",
-            reviews: [{ user: "Ali", rating: 5, text: "Crispy chicken 10/10" }, { user: "Wei", rating: 4, text: "Long queue but worth it." }]
-        },
-        {
-            id: 's5', name: "One Utama Shopping Centre", type: "shopping", category: "Mall", price: 0, rating: 4.7,
-            coords: [3.1502, 101.6152], image: "https://images.unsplash.com/photo-1582037928769-181f2644ecb7?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-            description: "One of the world's largest malls with an indoor rainforest.",
-            duration: 180, isIndoor: true, bestTime: "Afternoon"
         }
     ],
     "Kuala Lumpur": [
@@ -148,19 +129,13 @@ export const STATE_ACTIVITIES = {
             image: "https://images.unsplash.com/photo-1548013146-72479768bbaa?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
             videoUrl: "https://www.youtube.com/embed/V6_yFf3fD8A",
             description: "The world's tallest twin towers. Best viewed at night from KLCC Park. You can walk the Skybridge connecting the two towers.",
-            duration: 90, isIndoor: false, bestTime: "Evening",
-            reviews: [
-                { user: "Tom", rating: 5, text: "Iconic! Must see when in Malaysia." },
-                { user: "Lucy", rating: 5, text: "The view from the bridge is amazing but book tickets in advance." }
-            ]
-        },
-        {
-            id: 'k3', name: "Pavilion KL", type: "shopping", category: "Mall", price: 0, rating: 4.8,
-            coords: [3.1485, 101.7139], image: "https://images.unsplash.com/photo-1582037928769-181f2644ecb7?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-            description: "Luxury shopping destination with award-winning store concepts.",
-            duration: 120, isIndoor: true, bestTime: "Afternoon"
+            duration: 90, isIndoor: false, bestTime: "Evening"
         }
-    ]
+    ],
+    "Penang": [],
+    "Melaka": [],
+    "Johor": [],
+    "Sabah": []
 };
 
 export const DESTINATION_INTELLIGENCE = {
@@ -168,7 +143,8 @@ export const DESTINATION_INTELLIGENCE = {
     "Kuala Lumpur": { minDays: 3, suggestedPace: "Packed", bestFor: ["Shopping", "City Sightseeing"] },
     "Penang": { minDays: 3, suggestedPace: "Relaxed", bestFor: ["Food", "Heritage"] },
     "Melaka": { minDays: 2, suggestedPace: "Relaxed", bestFor: ["History", "Food"] },
-    "Johor": { minDays: 2, suggestedPace: "Balanced", bestFor: ["Theme Parks", "Shopping"] }
+    "Johor": { minDays: 2, suggestedPace: "Balanced", bestFor: ["Theme Parks", "Shopping"] },
+    "Sabah": { minDays: 4, suggestedPace: "Adventure", bestFor: ["Nature", "Hiking"] }
 };
 
 export const ITINERARY_RULES = {

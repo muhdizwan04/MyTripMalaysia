@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, User, Plus, Trash2, DollarSign, Calculator, Users } from 'lucide-react';
 import { Card, CardContent } from '../../components/ui/Card';
@@ -6,23 +6,50 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useCurrency } from '../../context/CurrencyContext';
 
+// Simple check for internal icon component
+function CloseIcon({ size = 24, className = "" }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width={size}
+            height={size}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={className}
+        >
+            <path d="M18 6 6 18" />
+            <path d="m6 6 12 12" />
+        </svg>
+    );
+}
+
 export default function BillSplitter() {
+    console.log("Rendering BillSplitter"); // Debug log
     const navigate = useNavigate();
     const { formatPrice } = useCurrency();
 
     // State
     const [participants, setParticipants] = useState(() => {
-        const saved = localStorage.getItem('trip_participants');
-        return saved ? JSON.parse(saved) : ['You', 'Sarah', 'Amir'];
+        try {
+            const saved = localStorage.getItem('trip_participants');
+            return saved ? JSON.parse(saved) : ['You', 'Sarah', 'Amir'];
+        } catch (e) {
+            console.error("Error parsing participants from local storage:", e);
+            return ['You', 'Sarah', 'Amir'];
+        }
     });
 
     useEffect(() => {
         localStorage.setItem('trip_participants', JSON.stringify(participants));
     }, [participants]);
-    const [newParticipant, setNewParticipant] = useState('');
 
+    const [newParticipant, setNewParticipant] = useState('');
     const [amount, setAmount] = useState('');
-    const [description, setDescription] = useState(''); // Used for Custom Type specification or generic note
+    const [description, setDescription] = useState('');
     const [expenseType, setExpenseType] = useState('Food');
     const [payer, setPayer] = useState('You');
     const [splitMethod, setSplitMethod] = useState('equal'); // 'equal' | 'manual'
@@ -97,54 +124,68 @@ export default function BillSplitter() {
 
     // Calculation Logic
     const calculateDebts = () => {
-        const balances = {};
-        participants.forEach(p => balances[p] = 0);
+        try {
+            if (expenses.length === 0) return [];
 
-        expenses.forEach(expense => {
-            const paidBy = expense.payer;
-            balances[paidBy] += expense.amount; // Payer gets credit
+            const balances = {};
+            participants.forEach(p => balances[p] = 0);
 
-            // Deduct shares from each participant
-            Object.entries(expense.shares).forEach(([person, share]) => {
-                balances[person] -= share;
-            });
-        });
+            expenses.forEach(expense => {
+                const paidBy = expense.payer;
+                // Use safe 0 if undefined
+                balances[paidBy] = (balances[paidBy] || 0) + expense.amount;
 
-        const debtors = [];
-        const creditors = [];
-
-        Object.entries(balances).forEach(([person, amount]) => {
-            if (amount < -0.01) debtors.push({ person, amount });
-            else if (amount > 0.01) creditors.push({ person, amount });
-        });
-
-        debtors.sort((a, b) => a.amount - b.amount);
-        creditors.sort((a, b) => b.amount - a.amount);
-
-        const debts = [];
-        let i = 0;
-        let j = 0;
-
-        while (i < debtors.length && j < creditors.length) {
-            let debtor = debtors[i];
-            let creditor = creditors[j];
-
-            let amount = Math.min(Math.abs(debtor.amount), creditor.amount);
-
-            debts.push({
-                from: debtor.person,
-                to: creditor.person,
-                amount: amount
+                Object.entries(expense.shares).forEach(([person, share]) => {
+                    balances[person] = (balances[person] || 0) - share;
+                });
             });
 
-            debtor.amount += amount;
-            creditor.amount -= amount;
+            const debtors = [];
+            const creditors = [];
 
-            if (Math.abs(debtor.amount) < 0.01) i++;
-            if (creditor.amount < 0.01) j++;
+            Object.entries(balances).forEach(([person, amount]) => {
+                if (amount < -0.01) debtors.push({ person, amount });
+                else if (amount > 0.01) creditors.push({ person, amount });
+            });
+
+            debtors.sort((a, b) => a.amount - b.amount);
+            creditors.sort((a, b) => b.amount - a.amount);
+
+            const debts = [];
+            let i = 0;
+            let j = 0;
+            let safetyCounter = 0;
+
+            while (i < debtors.length && j < creditors.length) {
+                safetyCounter++;
+                if (safetyCounter > 100) {
+                    console.error("Infinite loop detected in calculateDebts");
+                    break;
+                }
+
+                let debtor = debtors[i];
+                let creditor = creditors[j];
+
+                let amount = Math.min(Math.abs(debtor.amount), creditor.amount);
+
+                debts.push({
+                    from: debtor.person,
+                    to: creditor.person,
+                    amount: amount
+                });
+
+                debtor.amount += amount;
+                creditor.amount -= amount;
+
+                if (Math.abs(debtor.amount) < 0.01) i++;
+                if (creditor.amount < 0.01) j++;
+            }
+
+            return debts;
+        } catch (error) {
+            console.error("Error calculating debts:", error);
+            return [];
         }
-
-        return debts;
     };
 
     const debts = calculateDebts();
@@ -154,12 +195,12 @@ export default function BillSplitter() {
         <div className="min-h-screen bg-batik pb-24">
             <div className="max-w-md mx-auto px-6 py-10">
                 <div className="mb-8">
-                    <button onClick={() => navigate('/')} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-4">
+                    <button onClick={() => navigate('/trips/create')} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-4">
                         <ArrowLeft className="h-5 w-5" />
-                        <span className="text-sm font-bold">Back</span>
+                        <span className="text-sm font-bold">Back to Trip</span>
                     </button>
-                    <h1 className="text-4xl font-black tracking-tighter mb-2">Details Bill Splitter</h1>
-                    <p className="text-sm text-muted-foreground font-medium">Split expenses fairly among friends</p>
+                    <h1 className="text-4xl font-black tracking-tighter mb-2">Expenses</h1>
+                    <p className="text-sm text-muted-foreground font-medium">Split bills fairly among friends</p>
                 </div>
 
                 {/* Participants Section */}
@@ -177,7 +218,7 @@ export default function BillSplitter() {
                                     <span className="text-sm font-bold">{p}</span>
                                     {p !== 'You' && (
                                         <button onClick={() => removeParticipant(p)} className="text-red-400 hover:text-red-600">
-                                            <X size={14} />
+                                            <CloseIcon size={14} />
                                         </button>
                                     )}
                                 </div>
@@ -373,24 +414,4 @@ export default function BillSplitter() {
             </div>
         </div>
     );
-}
-
-function X({ size = 24, className = "" }) {
-    return (
-        <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width={size}
-            height={size}
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={className}
-        >
-            <path d="M18 6 6 18" />
-            <path d="m6 6 12 12" />
-        </svg>
-    )
 }

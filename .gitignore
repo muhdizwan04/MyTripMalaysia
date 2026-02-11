@@ -22,3 +22,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Security and Keys
+.env
+.env.*
+serviceAccountKey.json
+backend/src/config/serviceAccountKey.json
+src/config/serviceAccountKey.json
+*.json.key

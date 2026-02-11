@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/Card';
@@ -9,10 +9,14 @@ import {
     Sparkles, Plus, Clock, ArrowRight, X, Info, Car, Bus
 } from 'lucide-react';
 import { MALAYSIA_LOCATIONS, STATE_ACTIVITIES, ACCOMMODATION_DATA, TRANSPORT_ESTIMATES, DESTINATION_INTELLIGENCE } from '../../lib/constants';
+import { getDestinations, getAttractions, getShops, fetchHotels } from '../../lib/api';
+import { calculateCenterPoint, calculateDistanceFromRef } from '../../lib/utils';
 import ActivityDetailsModal from '../../components/trips/ActivityDetailsModal';
+import { generateSmartItinerary } from '../../utils/smartItinerary';
 
 const PRIORITIES = [
     { id: 'Food', label: 'Local Food', icon: Utensils },
+    { id: 'Halal', label: 'Halal Food', icon: Utensils },
     { id: 'Viral', label: 'Viral Spots', icon: Camera },
     { id: 'Nature', label: 'Nature/Relax', icon: Compass },
     { id: 'Shopping', label: 'Shopping', icon: ShoppingBag },
@@ -27,14 +31,26 @@ export default function CreateTrip() {
     const [selectedDetailActivity, setSelectedDetailActivity] = useState(null);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
+    // Backend Data State
+    const [destinations, setDestinations] = useState([]);
+    const [backendAttractions, setBackendAttractions] = useState([]);
+    const [backendMalls, setBackendMalls] = useState([]);
+    const [hotels, setHotels] = useState([]);
+    const [loadingAttractions, setLoadingAttractions] = useState(false);
+
+    // Shop Selection Modal State
+    const [showShopsModal, setShowShopsModal] = useState(false);
+    const [selectedMall, setSelectedMall] = useState(null);
+    const [mallShops, setMallShops] = useState([]);
+    const [loadingShops, setLoadingShops] = useState(false);
+    const [selectedShopIds, setSelectedShopIds] = useState([]);
+
     const locationState = useLocation().state;
 
     const [tripData, setTripData] = useState({
         locations: locationState?.preSelectedState ? [locationState.preSelectedState] : [],
         date: new Date().toISOString().split('T')[0],
         activities: [], // { id, name, time, duration, image, category, location, day }
-        priorities: ['Food'],
-        duration: 3,
         priorities: ['Food'],
         duration: 3,
         guests: 2,
@@ -45,23 +61,180 @@ export default function CreateTrip() {
     const [platform, setPlatform] = useState('hotel'); // hotel, airbnb, homestay
     const [currentAccomDay, setCurrentAccomDay] = useState(1);
 
+    // Fetch destinations and hotels on mount
+    useEffect(() => {
+        const fetchInitialData = async () => {
+            try {
+                const [destData, hotelsData] = await Promise.all([
+                    getDestinations(),
+                    fetchHotels()
+                ]);
+                setDestinations(destData);
+                setHotels(hotelsData);
+            } catch (error) {
+                console.error('Failed to fetch initial data:', error);
+                // Silently fall back to constants if backend unavailable
+            }
+        };
+        fetchInitialData();
+    }, []);
+
+    // Fetch attractions when locations change
+    useEffect(() => {
+        const fetchAttractions = async () => {
+            if (!tripData.locations || tripData.locations.length === 0) {
+                setBackendAttractions([]);
+                return;
+            }
+
+            setLoadingAttractions(true);
+            try {
+                // Fetch attractions for all selected destinations
+                const attractionsPromises = tripData.locations.map(loc => {
+                    // Find destination ID from name
+                    const dest = destinations.find(d => d.name === loc);
+                    if (dest) {
+                        return getAttractions({ destinationId: dest.id });
+                    }
+                    return Promise.resolve([]);
+                });
+
+                const attractionsArrays = await Promise.all(attractionsPromises);
+                const allAttractions = attractionsArrays.flat();
+
+                // Separate malls from regular attractions
+                const malls = allAttractions
+                    .filter(a => a.isMall)
+                    .map(attr => ({
+                        id: attr.id,
+                        name: attr.name,
+                        category: 'Shopping',
+                        type: 'Mall',
+                        isMall: true,
+                        duration: (attr.suggested_duration || 180) / 60,
+                        price: attr.price || 0,
+                        location: attr.location_address || attr.state,
+                        state: attr.state,
+                        latitude: attr.latitude,
+                        longitude: attr.longitude,
+                        coords: [attr.latitude, attr.longitude],
+                        image: attr.image_url || 'https://images.unsplash.com/photo-1519567241046-7f570eee3ce6?q=80&w=2670&auto=format&fit=crop',
+                        rating: 4.5,
+                        bestTime: 'Afternoon',
+                        description: attr.description || '',
+                        tags: attr.tags || [],
+                        selectedShops: []
+                    }));
+
+                // Transform regular attractions
+                const transformed = allAttractions
+                    .filter(a => !a.isMall)
+                    .map(attr => ({
+                        id: attr.id,
+                        name: attr.name,
+                        category: attr.type || 'Activity',
+                        type: attr.type || 'activity',
+                        duration: (attr.suggested_duration || 120) / 60,
+                        price: attr.price || 0,
+                        location: attr.location_address || attr.state,
+                        state: attr.state,
+                        latitude: attr.latitude,
+                        longitude: attr.longitude,
+                        coords: [attr.latitude, attr.longitude],
+                        image: attr.image_url || 'https://images.unsplash.com/photo-1596422846543-75c6fc18593?q=80&w=2670&auto=format&fit=crop',
+                        rating: 4.5,
+                        bestTime: 'Morning',
+                        description: attr.description || '',
+                        tags: attr.tags || []
+                    }));
+
+                setBackendAttractions(transformed);
+                setBackendMalls(malls);
+            } catch (error) {
+                console.error('Failed to fetch attractions:', error);
+                setBackendAttractions([]);
+            } finally {
+                setLoadingAttractions(false);
+            }
+        };
+
+        if (destinations.length > 0) {
+            fetchAttractions();
+        }
+    }, [tripData.locations, destinations]);
+
     // -- Derived Data --
+    // Merge backend attractions with fallback constants and add distances
     const availableStateActivities = useMemo(() => {
         if (!tripData.locations || tripData.locations.length === 0) return [];
-        return tripData.locations.flatMap(loc => STATE_ACTIVITIES[loc] || []);
-    }, [tripData.locations]);
+
+        let allActivities = [];
+        // Prefer backend data if available, fallback to constants
+        if (backendAttractions.length > 0 || backendMalls.length > 0) {
+            allActivities = [...backendAttractions, ...backendMalls];
+        } else {
+            allActivities = tripData.locations.flatMap(loc => STATE_ACTIVITIES[loc] || []);
+        }
+
+        // Calculate center point from all attractions
+        const centerPoint = calculateCenterPoint(allActivities);
+
+        // Add distance to each attraction
+        const activitiesWithDistance = allActivities.map(activity => {
+            const distance = centerPoint ? calculateDistanceFromRef(activity, centerPoint) : null;
+            return { ...activity, distance };
+        });
+
+        // Sort by distance (nearest first), with null distances at the end
+        return activitiesWithDistance.sort((a, b) => {
+            if (a.distance === null) return 1;
+            if (b.distance === null) return -1;
+            return a.distance - b.distance;
+        });
+    }, [tripData.locations, backendAttractions, backendMalls]);
 
     const suggestions = useMemo(() => {
         if (!tripData.locations.length || availableStateActivities.length === 0) return [];
         const selectedIds = new Set(tripData.activities.map(a => a.id));
         return availableStateActivities.filter(a =>
             !selectedIds.has(a.id) &&
-            tripData.priorities.some(p => a.category?.includes(p))
+            tripData.priorities.some(p => {
+                const searchStr = p.toLowerCase();
+                // Check category, type, and tags (if any)
+                return (a.category?.toLowerCase().includes(searchStr)) ||
+                    (a.type?.toLowerCase().includes(searchStr)) ||
+                    (a.tags?.some(t => t.toLowerCase().includes(searchStr)));
+            })
         ).slice(0, 5);
     }, [tripData.locations, tripData.activities, tripData.priorities, availableStateActivities]);
 
     // -- Actions --
-    const handleNext = () => setStep(s => s + 1);
+    const handleNext = () => {
+        if (step === 2 && tripData.activities.length === 0) {
+            // Auto-generate smart itinerary
+            const allAvailable = [...backendAttractions, ...backendMalls];
+            const smartPlan = generateSmartItinerary(
+                tripData.priorities,
+                tripData.locations[0], // Use first selected location for now
+                allAvailable
+            );
+
+            if (smartPlan.length > 0) {
+                // Convert smartPlan activities to the format expected by tripData.activities
+                const formattedActivities = smartPlan.map((act, index) => {
+                    const times = ['09:00', '12:30', '15:00', '19:30'];
+                    return {
+                        ...act,
+                        time: times[index] || '10:00',
+                        day: 1, // Start with Day 1
+                        duration: act.duration || 2
+                    };
+                });
+                setTripData(prev => ({ ...prev, activities: formattedActivities }));
+            }
+        }
+        setStep(s => s + 1);
+    };
     const handleBack = () => setStep(s => s - 1);
 
     const checkOverlap = (id, time, day, list) => {
@@ -139,6 +312,62 @@ export default function CreateTrip() {
     const handleSuggestionClick = (act) => {
         setSelectedDetailActivity(act);
         setIsDetailModalOpen(true);
+    };
+
+    // Mall and Shop Handlers
+    const handleMallSelect = async (mall) => {
+        setSelectedMall(mall);
+        setLoadingShops(true);
+        setShowShopsModal(true);
+        setSelectedShopIds([]);
+
+        try {
+            const shops = await getShops(mall.id);
+            setMallShops(shops || []);
+        } catch (error) {
+            console.error('Failed to fetch shops:', error);
+            setMallShops([]);
+        } finally {
+            setLoadingShops(false);
+        }
+    };
+
+    const toggleShop = (shopId) => {
+        setSelectedShopIds(prev =>
+            prev.includes(shopId)
+                ? prev.filter(id => id !== shopId)
+                : [...prev, shopId]
+        );
+    };
+
+    const selectAllShops = () => {
+        setSelectedShopIds(mallShops.map(s => s.id));
+    };
+
+    const confirmMallWithShops = () => {
+        if (!selectedMall) return;
+
+        const defaultTime = '14:00';
+        const defaultDay = 1;
+
+        // Add selected shops to mall data
+        const mallWithShops = {
+            ...selectedMall,
+            selectedShops: mallShops.filter(s => selectedShopIds.includes(s.id)),
+            time: defaultTime,
+            duration: selectedShopIds.length > 0 ? 3 : 2,
+            day: defaultDay
+        };
+
+        setTripData({
+            ...tripData,
+            activities: [...tripData.activities, mallWithShops]
+        });
+
+        setShowShopsModal(false);
+        setSelectedMall(null);
+        setMallShops([]);
+        setSelectedShopIds([]);
     };
 
     const finalize = () => {
@@ -333,6 +562,15 @@ export default function CreateTrip() {
                 </div>
             )}
 
+            {loadingAttractions && (
+                <div className="flex items-center justify-center p-8">
+                    <div className="flex items-center gap-3 text-primary">
+                        <div className="h-5 w-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin"></div>
+                        <span className="text-sm font-bold">Loading attractions from {tripData.locations.join(', ')}...</span>
+                    </div>
+                </div>
+            )}
+
             <div className={`space-y-3 max-h-[420px] overflow-y-auto pr-2 custom-scrollbar`}>
                 {['Morning', 'Afternoon', 'Evening', 'Night'].map(timeSlot => {
                     const activitiesInSlot = availableStateActivities.filter(a => (a.bestTime || 'Morning') === timeSlot);
@@ -354,18 +592,24 @@ export default function CreateTrip() {
                                                 <div className="flex items-center gap-2 mt-1">
                                                     <span className="text-[10px] font-black text-primary/70 uppercase tracking-tighter">{act.category}</span>
                                                     <span className="text-[10px] text-muted-foreground">•</span>
-                                                    <span className="text-[10px] font-bold text-muted-foreground">{act.duration ? `${act.duration / 60}h` : '2h'}</span>
+                                                    <span className="text-[10px] font-bold text-muted-foreground">{act.duration}h</span>
                                                     <span className="text-[10px] text-muted-foreground">•</span>
                                                     <span className="text-[10px] font-bold text-muted-foreground">RM {act.price || 0}</span>
+                                                    {act.distance !== null && act.distance !== undefined && (
+                                                        <>
+                                                            <span className="text-[10px] text-muted-foreground">•</span>
+                                                            <span className="text-[10px] font-bold text-green-600">{act.distance.toFixed(1)} km</span>
+                                                        </>
+                                                    )}
                                                 </div>
                                             </div>
                                             <Button
                                                 size="sm"
-                                                variant={selected ? "destructive" : "outline"}
-                                                className={`rounded-xl h-9 px-4 text-[10px] font-black transition-all ${selected ? 'shadow-lg shadow-destructive/20' : ''}`}
-                                                onClick={() => toggleActivity(act)}
+                                                variant={selected ? "destructive" : (act.isMall ? "default" : "outline")}
+                                                className={`rounded-xl h-9 px-4 text-[10px] font-black transition-all ${selected ? 'shadow-lg shadow-destructive/20' : act.isMall ? 'bg-primary text-white' : ''}`}
+                                                onClick={() => act.isMall ? handleMallSelect(act) : toggleActivity(act)}
                                             >
-                                                {selected ? <X className="h-4 w-4" /> : 'ADD'}
+                                                {selected ? <X className="h-4 w-4" /> : act.isMall ? <><ShoppingBag className="h-3.5 w-3.5 mr-1" /> VIEW SHOPS</> : 'ADD'}
                                             </Button>
                                         </div>
                                         {selected && (
@@ -505,6 +749,117 @@ export default function CreateTrip() {
                     </Card>
                 </div>
             )}
+
+            {/* Shop Selection Modal */}
+            {showShopsModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-in fade-in">
+                    <Card className="w-full max-w-2xl rounded-[32px] overflow-hidden border-none shadow-2xl max-h-[90vh] flex flex-col">
+                        <CardHeader className="bg-gradient-to-r from-primary to-primary/80 text-primary-foreground p-8 pb-10">
+                            <div className="flex items-center gap-4">
+                                <div className="h-16 w-16 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center">
+                                    <ShoppingBag className="h-8 w-8 text-white" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-2xl font-black tracking-tight">{selectedMall?.name}</CardTitle>
+                                    <CardDescription className="text-primary-foreground/70 font-bold">Select shops you'd like to visit</CardDescription>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="p-8 space-y-4 overflow-y-auto flex-1">
+                            {loadingShops ? (
+                                <div className="flex items-center justify-center p-12">
+                                    <div className="flex items-center gap-3 text-primary">
+                                        <div className="h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin"></div>
+                                        <span className="text-sm font-bold">Loading shops...</span>
+                                    </div>
+                                </div>
+                            ) : mallShops.length === 0 ? (
+                                <div className="text-center p-12">
+                                    <ShoppingBag className="h-12 w-12 text-muted-foreground/40 mx-auto mb-4" />
+                                    <p className="text-sm font-bold text-muted-foreground">No shops available yet</p>
+                                    <p className="text-xs text-muted-foreground/70 mt-2">You can still add this mall to your itinerary</p>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="flex justify-between items-center pb-4 border-b">
+                                        <span className="text-xs font-black text-muted-foreground uppercase tracking-widest">
+                                            {selectedShopIds.length} of {mallShops.length} selected
+                                        </span>
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="text-primary hover:bg-primary/10 text-xs font-black"
+                                            onClick={selectAllShops}
+                                        >
+                                            SELECT ALL
+                                        </Button>
+                                    </div>
+                                    {(() => {
+                                        // Group shops by category
+                                        const shopsByCategory = mallShops.reduce((acc, shop) => {
+                                            const category = shop.category || 'Other';
+                                            if (!acc[category]) acc[category] = [];
+                                            acc[category].push(shop);
+                                            return acc;
+                                        }, {});
+
+                                        return Object.entries(shopsByCategory).map(([category, shops]) => (
+                                            <div key={category} className="space-y-3">
+                                                <h4 className="text-xs font-black text-primary uppercase tracking-widest pl-2 border-l-4 border-primary/20">
+                                                    {category}
+                                                </h4>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    {shops.map(shop => (
+                                                        <label
+                                                            key={shop.id}
+                                                            className={`flex items-center gap-3 p-4 rounded-2xl border-2 cursor-pointer transition-all ${selectedShopIds.includes(shop.id)
+                                                                ? 'border-primary bg-primary/5'
+                                                                : 'border-muted hover:border-primary/20'
+                                                                }`}
+                                                        >
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedShopIds.includes(shop.id)}
+                                                                onChange={() => toggleShop(shop.id)}
+                                                                className="h-5 w-5 rounded border-2 border-primary text-primary focus:ring-primary"
+                                                            />
+                                                            <div className="flex-1">
+                                                                <p className="text-sm font-bold">{shop.name}</p>
+                                                                <p className="text-xs text-muted-foreground">{shop.category}</p>
+                                                            </div>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ));
+                                    })()}
+                                </>
+                            )}
+                        </CardContent>
+                        <div className="p-6 border-t bg-muted/30 flex gap-3">
+                            <Button
+                                variant="ghost"
+                                className="flex-1 h-14 rounded-2xl font-black text-muted-foreground"
+                                onClick={() => {
+                                    setShowShopsModal(false);
+                                    setSelectedMall(null);
+                                    setMallShops([]);
+                                    setSelectedShopIds([]);
+                                }}
+                            >
+                                CANCEL
+                            </Button>
+                            <Button
+                                className="flex-1 h-14 rounded-2xl font-black shadow-lg shadow-primary/20"
+                                onClick={confirmMallWithShops}
+                            >
+                                <Check className="h-5 w-5 mr-2" />
+                                ADD TO TRIP {selectedShopIds.length > 0 && `(${selectedShopIds.length} shops)`}
+                            </Button>
+                        </div>
+                    </Card>
+                </div>
+            )}
         </div>
     );
 
@@ -582,7 +937,7 @@ export default function CreateTrip() {
             </div>
 
             <div className="grid grid-cols-1 gap-4">
-                {ACCOMMODATION_DATA[platform].map(stay => {
+                {(hotels.length > 0 ? hotels.filter(h => h.type.toLowerCase() === platform.toLowerCase()) : ACCOMMODATION_DATA[platform] || []).map(stay => {
                     const isSelected = tripData.accommodation[currentAccomDay]?.id === stay.id;
                     return (
                         <Card
@@ -592,7 +947,7 @@ export default function CreateTrip() {
                         >
                             <CardContent className="p-4 flex gap-5">
                                 <div className="relative shrink-0">
-                                    <img src={stay.image} className="h-24 w-24 rounded-[24px] object-cover shadow-sm transition-transform group-hover:scale-105" alt="" />
+                                    <img src={stay.image_url || stay.image} className="h-24 w-24 rounded-[24px] object-cover shadow-sm transition-transform group-hover:scale-105" alt="" />
                                     {isSelected && (
                                         <div className="absolute -top-2 -right-2 h-7 w-7 rounded-full bg-primary text-white flex items-center justify-center shadow-lg border-4 border-background">
                                             <Check className="h-4 w-4" />

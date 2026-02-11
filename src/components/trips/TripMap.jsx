@@ -25,11 +25,13 @@ function MapBounds({ markers }) {
 }
 
 // Custom Numbered Icon
-const createNumberedIcon = (number, isPast) => {
+const createNumberedIcon = (number, isPast, isMall = false) => {
+    const bgColor = isPast ? '#94a3b8' : (isMall ? '#22c55e' : '#2563eb'); // Gray for past, green for malls, blue for regular
+
     return divIcon({
         className: 'custom-marker-icon',
         html: `<div style="
-            background-color: ${isPast ? '#94a3b8' : '#2563eb'}; 
+            background-color: ${bgColor}; 
             color: white; 
             border-radius: 50%; 
             width: 24px; 
@@ -90,6 +92,7 @@ export default function TripMap({ items = [] }) {
                 day: day.day,
                 time: act.time,
                 isPast: act.isPast,
+                isMall: act.isMall || act.type === 'Mall',
                 number: globalIndex,
                 position: position
             };
@@ -122,20 +125,20 @@ export default function TripMap({ items = [] }) {
                 />
 
                 {markers.map(marker => {
-                    // Logic to check if past. We need base date. 
-                    // Since we don't have it passed prop, we might need to update parent to pass it.
-                    // For now, let's just use the isPast prop if it exists on the activity (we'll add it in parent).
                     const isPast = marker.isPast || false;
 
                     return (
                         <Marker
                             key={marker.id}
                             position={marker.position}
-                            icon={createNumberedIcon(marker.number, isPast)}
+                            icon={createNumberedIcon(marker.number, isPast, marker.isMall)}
                         >
                             <Popup>
                                 <div className="text-sm font-semibold">{marker.name}</div>
                                 <div className="text-xs text-muted-foreground">Day {marker.day} • {marker.time}</div>
+                                {marker.isMall && (
+                                    <div className="text-xs font-bold text-green-600 mt-1">🛍️ Shopping Mall</div>
+                                )}
                             </Popup>
                         </Marker>
                     );

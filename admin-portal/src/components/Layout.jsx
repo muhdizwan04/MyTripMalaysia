@@ -10,7 +10,10 @@ import {
     Menu,
     X,
     ChevronRight,
-    User
+    User,
+    Globe,
+    ShoppingBag,
+    Store
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -21,9 +24,9 @@ function cn(...inputs) {
 
 const navItems = [
     { name: 'Dashboard', path: '/', icon: LayoutDashboard },
+    { name: 'Destinations', path: '/destinations', icon: Globe },
+    { name: 'Attractions', path: '/activities', icon: MapPin },
     { name: 'Hotels', path: '/hotels', icon: Hotel },
-    { name: 'Activities', path: '/activities', icon: MapPin },
-    { name: 'Discovery', path: '/discovery', icon: Utensils },
     { name: 'Logistics', path: '/logistics', icon: Truck },
     { name: 'Analytics', path: '/analytics', icon: Search },
 ];

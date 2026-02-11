@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
 import { Search, MapPin, Compass, Utensils, ShoppingBag, Camera, ChevronRight, Star, User, DollarSign, Sparkles, X } from 'lucide-react';
 import { useCurrency } from '../context/CurrencyContext';
 import FeedPost from '../components/feed/FeedPost';
-import { FEED_POSTS, MOCK_ITINERARIES, FEATURED_TRIPS, VIRAL_SPOTS } from '../lib/constants';
+import { FEED_POSTS, MOCK_ITINERARIES, VIRAL_SPOTS } from '../lib/constants'; // Removed FEATURED_TRIPS
+import { fetchAttractions, fetchDestinations, fetchItineraries } from '../lib/api';
 
 export default function Home() {
     const navigate = useNavigate();
@@ -13,6 +14,38 @@ export default function Home() {
     const [searchQuery, setSearchQuery] = useState('');
     const [activeFilter, setActiveFilter] = useState('all');
     const [selectedSpot, setSelectedSpot] = useState(null);
+
+    // API State
+    const [attractions, setAttractions] = useState([]);
+    const [destinations, setDestinations] = useState([]);
+    const [itineraries, setItineraries] = useState([]); // New state for itineraries
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    // Fetch attractions, destinations, and itineraries from backend
+    useEffect(() => {
+        const loadData = async () => {
+            try {
+                setLoading(true);
+                setError(null);
+                const [attractionsData, destinationsData, itinerariesData] = await Promise.all([
+                    fetchAttractions(),
+                    fetchDestinations(),
+                    fetchItineraries()
+                ]);
+                setAttractions(attractionsData);
+                setDestinations(destinationsData);
+                setItineraries(itinerariesData);
+            } catch (err) {
+                console.error('Failed to load data:', err);
+                setError('Failed to load data. Using defaults.');
+                // Fallback handled by UI checks
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadData();
+    }, []);
 
     const isSearching = searchQuery.trim().length > 0;
 
@@ -93,7 +126,6 @@ export default function Home() {
                 )}
 
                 {/* Quick Actions - Hidden when searching */}
-                {/* Quick Actions - Hidden when searching */}
                 {!isSearching && (
                     <div className="space-y-8 mb-10">
                         {/* Prominent Start Planning CTA */}
@@ -136,7 +168,7 @@ export default function Home() {
                             ))}
                         </div>
 
-                        {/* Featured Trips / Trending Itineraries */}
+                        {/* Featured Trips / Trending Itineraries (FROM DB) */}
                         <div>
                             <div
                                 className="flex items-center justify-between mb-4 px-1 cursor-pointer hover:bg-white/5 p-2 transition-colors rounded-xl"
@@ -146,38 +178,42 @@ export default function Home() {
                                 <ChevronRight className="h-4 w-4 text-muted-foreground" />
                             </div>
                             <div className="flex gap-4 overflow-x-auto no-scrollbar pb-4 -mx-6 px-6">
-                                {FEATURED_TRIPS.map((trip) => (
-                                    <div
-                                        key={trip.id}
-                                        onClick={() => navigate('/trips/itinerary', {
-                                            state: {
-                                                ...trip,
-                                                guests: 2,
-                                                locations: trip.states,
-                                                duration: parseInt(trip.days),
-                                                startDate: new Date(),
-                                                endDate: new Date(new Date().setDate(new Date().getDate() + parseInt(trip.days))),
-                                                preGeneratedItinerary: MOCK_ITINERARIES[trip.id],
-                                                mode: 'preview'
-                                            }
-                                        })}
-                                        className="min-w-[200px] h-[240px] rounded-[28px] overflow-hidden relative group cursor-pointer border-2 border-white/50 shadow-sm"
-                                    >
-                                        <img src={trip.image} alt={trip.title} className="md:w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-                                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                                        <div className="absolute bottom-4 left-4 right-4">
-                                            <div className="inline-block px-2 py-1 bg-primary/90 rounded-lg text-[8px] font-black text-white uppercase mb-2 backdrop-blur-md">
-                                                {trip.tag}
-                                            </div>
-                                            <h4 className="text-white font-black text-lg leading-tight mb-1">{trip.title}</h4>
-                                            <div className="flex items-center gap-2 text-white/80 text-[10px] font-bold">
-                                                <span>{trip.days}</span>
-                                                <span>•</span>
-                                                <span>{trip.price}</span>
+                                {itineraries.length > 0 ? (
+                                    itineraries.map((trip) => (
+                                        <div
+                                            key={trip.id}
+                                            onClick={() => navigate('/trips/itinerary', {
+                                                state: {
+                                                    ...trip,
+                                                    guests: 2,
+                                                    locations: trip.states || [], // Fallback if no states in DB yet
+                                                    duration: parseInt(trip.days),
+                                                    startDate: new Date(),
+                                                    endDate: new Date(new Date().setDate(new Date().getDate() + parseInt(trip.days))),
+                                                    preGeneratedItinerary: MOCK_ITINERARIES[trip.id] || {}, // Ideally fetch real structure too
+                                                    mode: 'preview'
+                                                }
+                                            })}
+                                            className="min-w-[200px] h-[240px] rounded-[28px] overflow-hidden relative group cursor-pointer border-2 border-white/50 shadow-sm"
+                                        >
+                                            <img src={trip.image_url} alt={trip.title} className="md:w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                                            <div className="absolute bottom-4 left-4 right-4">
+                                                <div className="inline-block px-2 py-1 bg-primary/90 rounded-lg text-[8px] font-black text-white uppercase mb-2 backdrop-blur-md">
+                                                    {trip.type}
+                                                </div>
+                                                <h4 className="text-white font-black text-lg leading-tight mb-1">{trip.title}</h4>
+                                                <div className="flex items-center gap-2 text-white/80 text-[10px] font-bold">
+                                                    <span>{trip.days} Days</span>
+                                                    <span>•</span>
+                                                    <span>RM {trip.price}</span>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    ))
+                                ) : (
+                                    <p className="text-xs text-muted-foreground pl-6">Loading itineraries...</p>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -191,21 +227,25 @@ export default function Home() {
                             <span className="text-[10px] font-black text-muted-foreground uppercase">13 States</span>
                         </div>
                         <div className="flex gap-4 overflow-x-auto no-scrollbar pb-4 -mx-6 px-6">
-                            {['Selangor', 'Kuala Lumpur', 'Penang', 'Perak', 'Malacca', 'Johor', 'Sabah'].map((state, idx) => (
+                            {(destinations.length > 0 ? destinations : [
+                                { name: 'Selangor', image_url: 'https://images.unsplash.com/photo-1548013146-72479768bbaa?auto=format&fit=crop&w=300&q=80' },
+                                { name: 'Kuala Lumpur', image_url: 'https://images.unsplash.com/photo-1524231757912-21f4fe3a7200?auto=format&fit=crop&w=300&q=80' },
+                                { name: 'Penang', image_url: 'https://images.unsplash.com/photo-1596422846543-75c6fc197f07?w=800' }
+                            ]).map((dest, idx) => (
                                 <div
                                     key={idx}
-                                    onClick={() => navigate('/trips/create', { state: { preSelectedState: state } })}
+                                    onClick={() => navigate('/trips/create', { state: { preSelectedState: dest.name } })}
                                     className="shrink-0 w-32 group cursor-pointer"
                                 >
                                     <div className="h-40 w-full rounded-[28px] overflow-hidden mb-3 relative shadow-lg group-hover:shadow-primary/20 transition-all border-2 border-white/50">
                                         <img
-                                            src={`https://images.unsplash.com/photo-${idx % 2 === 0 ? '1548013146-72479768bbaa' : '1524231757912-21f4fe3a7200'}?auto=format&fit=crop&w=300&q=80`}
-                                            alt={state}
+                                            src={dest.image_url}
+                                            alt={dest.name}
                                             className="h-full w-full object-cover group-hover:scale-110 transition-transform duration-500"
                                         />
                                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
                                         <div className="absolute bottom-3 left-3 right-3">
-                                            <p className="text-white text-xs font-black tracking-tight drop-shadow-lg">{state}</p>
+                                            <p className="text-white text-xs font-black tracking-tight drop-shadow-lg">{dest.name}</p>
                                         </div>
                                     </div>
                                 </div>
@@ -224,45 +264,71 @@ export default function Home() {
                             <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary group-hover:text-primary/80 transition-colors">Trending Now</h3>
                             <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
                         </div>
-                        <div className="space-y-4">
-                            {VIRAL_SPOTS.map((spot) => (
-                                <Card
-                                    key={spot.id}
-                                    onClick={() => setSelectedSpot(spot)}
-                                    className="overflow-hidden cursor-pointer group border-2 border-white/50 hover:shadow-xl hover:shadow-primary/10 transition-all rounded-[28px]"
-                                >
-                                    <CardContent className="p-0">
-                                        <div className="flex gap-4">
-                                            <div className="w-24 h-24 shrink-0 relative overflow-hidden">
-                                                <img src={spot.image} alt={spot.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                                                <div className="absolute top-2 left-2 bg-primary/90 text-white text-[8px] font-black px-2 py-1 rounded-full uppercase">
-                                                    {spot.tag}
-                                                </div>
-                                            </div>
-                                            <div className="flex-1 py-3 pr-4">
-                                                <h4 className="font-black text-sm mb-1 tracking-tight">{spot.name}</h4>
-                                                <div className="flex items-center gap-1 mb-2">
-                                                    <MapPin className="h-3 w-3 text-primary" />
-                                                    <span className="text-[10px] font-bold text-muted-foreground">{spot.location}</span>
-                                                </div>
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-1">
-                                                        <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
-                                                        <span className="text-[11px] font-black">{spot.rating}</span>
+
+                        {loading ? (
+                            <div className="text-center py-10">
+                                <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-3"></div>
+                                <p className="text-sm font-medium text-muted-foreground">Loading trending spots...</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                {(attractions.length > 0
+                                    ? attractions.filter(spot => spot.is_trending) // Use is_trending from Golden Schema
+                                    : VIRAL_SPOTS
+                                ).map((spot) => (
+                                    <Card
+                                        key={spot.id}
+                                        onClick={() => setSelectedSpot(spot)}
+                                        className="overflow-hidden cursor-pointer group border-2 border-white/50 hover:shadow-xl hover:shadow-primary/10 transition-all rounded-[28px]"
+                                    >
+                                        <CardContent className="p-0">
+                                            <div className="flex gap-4">
+                                                <div className="w-24 h-24 shrink-0 relative overflow-hidden">
+                                                    <img
+                                                        src={spot.image_url || spot.image || `https://images.unsplash.com/photo-1537996194471-e0f2909c8e0d?auto=format&fit=crop&w=200&q=80`}
+                                                        alt={spot.name}
+                                                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                                                    />
+                                                    <div className="absolute top-2 left-2 bg-primary/90 text-white text-[8px] font-black px-2 py-1 rounded-full uppercase">
+                                                        {spot.type || spot.tag || 'Attraction'}
                                                     </div>
-                                                    {spot.price > 0 && (
+                                                </div>
+                                                <div className="flex-1 py-3 pr-4">
+                                                    <h4 className="font-black text-sm mb-1 tracking-tight">{spot.name}</h4>
+                                                    <div className="flex items-center gap-1 mb-2">
+                                                        <MapPin className="h-3 w-3 text-primary" />
+                                                        <span className="text-[10px] font-bold text-muted-foreground">
+                                                            {spot.location || 'Malaysia'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center justify-between">
                                                         <div className="flex items-center gap-1">
-                                                            <DollarSign className="h-3 w-3 text-primary" />
-                                                            <span className="text-[11px] font-black text-primary">{formatPrice(spot.price)}</span>
+                                                            <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
+                                                            <span className="text-[11px] font-black">{spot.rating}</span>
                                                         </div>
-                                                    )}
+                                                        {/* Use price from Golden Schema */}
+                                                        {(spot.price) > 0 && (
+                                                            <div className="flex items-center gap-1">
+                                                                <DollarSign className="h-3 w-3 text-primary" />
+                                                                <span className="text-[11px] font-black text-primary">
+                                                                    {formatPrice(spot.price)}
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            ))}
-                        </div>
+                                        </CardContent>
+                                    </Card>
+                                ))}
+                            </div>
+                        )}
+
+                        {error && !loading && (
+                            <div className="text-center py-4">
+                                <p className="text-xs text-red-500">⚠️ {error}</p>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -310,7 +376,8 @@ export default function Home() {
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-[32px] max-w-lg w-full overflow-hidden shadow-2xl">
                         <div className="relative h-64">
-                            <img src={selectedSpot.image} alt={selectedSpot.name} className="w-full h-full object-cover" />
+                            {/* Use image_url from Golden Schema */}
+                            <img src={selectedSpot.image_url || selectedSpot.image} alt={selectedSpot.name} className="w-full h-full object-cover" />
                             <div className="absolute top-4 right-4">
                                 <button
                                     onClick={() => setSelectedSpot(null)}
@@ -320,7 +387,7 @@ export default function Home() {
                                 </button>
                             </div>
                             <div className="absolute top-4 left-4 bg-primary text-white text-xs font-black px-3 py-1 rounded-full uppercase">
-                                {selectedSpot.tag}
+                                {selectedSpot.type || selectedSpot.tag || 'Attraction'}
                             </div>
                         </div>
                         <div className="p-6">
@@ -334,12 +401,10 @@ export default function Home() {
                                     <Star className="h-5 w-5 fill-yellow-500 text-yellow-500" />
                                     <span className="font-black">{selectedSpot.rating}</span>
                                 </div>
-                                {selectedSpot.price > 0 && (
-                                    <div className="flex items-center gap-1">
-                                        <DollarSign className="h-4 w-4 text-primary" />
-                                        <span className="font-black text-primary">{formatPrice(selectedSpot.price)}</span>
-                                    </div>
-                                )}
+                                <div className="flex items-center gap-1">
+                                    <DollarSign className="h-4 w-4 text-primary" />
+                                    <span className="font-black text-primary">{formatPrice(selectedSpot.price || 0)}</span>
+                                </div>
                             </div>
                             <p className="text-sm leading-relaxed text-muted-foreground mb-6">{selectedSpot.description}</p>
                             <Button

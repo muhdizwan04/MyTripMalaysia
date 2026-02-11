@@ -7,7 +7,7 @@ import Signup from './pages/auth/Signup';
 import CreateTrip from './pages/trips/CreateTrip';
 import ItineraryView from './pages/trips/ItineraryView';
 import ExpenseTracker from './pages/trips/ExpenseTracker';
-import BillSplitter from './pages/trips/BillSplitter';
+import Expenses from './pages/Expenses';
 import TrendingItineraries from './pages/trips/TrendingItineraries';
 
 import { CurrencyProvider } from './context/CurrencyContext';
@@ -20,6 +20,9 @@ import ShoppingPage from './pages/ShoppingPage';
 import MustVisitPage from './pages/MustVisitPage';
 import MallDetailsPage from './pages/MallDetailsPage';
 import SettingsPage from './pages/SettingsPage';
+import TransportPage from './pages/TransportPage';
+import AdminDashboard from './pages/Admin/Dashboard';
+import AdminMalls from './pages/Admin/Malls';
 
 function App() {
   return (
@@ -28,6 +31,8 @@ function App() {
         <Routes>
           <Route element={<RootLayout />}>
             <Route path="/" element={<Home />} />
+            <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/admin/malls" element={<AdminMalls />} />
             <Route path="/auth/login" element={<Login />} />
             <Route path="/auth/signup" element={<Signup />} />
             <Route path="/trips" element={<TripsList />} />
@@ -38,10 +43,12 @@ function App() {
             <Route path="/shopping" element={<ShoppingPage />} />
             <Route path="/shopping/mall/:mallId" element={<MallDetailsPage />} />
             <Route path="/must-visit" element={<MustVisitPage />} />
+            <Route path="/expenses" element={<Expenses />} />
             <Route path="/trips/itinerary" element={<ItineraryView />} />
             <Route path="/trips/trending" element={<TrendingItineraries />} />
-            <Route path="/trips/expenses" element={<BillSplitter />} />
+            <Route path="/trips/expenses" element={<Expenses />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/transport" element={<TransportPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
         </Routes>

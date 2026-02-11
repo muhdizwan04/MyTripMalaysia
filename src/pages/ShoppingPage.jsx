@@ -1,18 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Search, MapPin, Star, Clock } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/Card';
-
-const SHOPPING_PLACES = [
-    { id: 1, name: "Pavilion KL", location: "Bukit Bintang", state: "Kuala Lumpur", rating: 4.8, type: "Mall", category: "Luxury", image: "https://images.unsplash.com/photo-1582037928769-181f2644ecb7?auto=format&fit=crop&w=500&q=80", hours: "10 AM - 10 PM" },
-    { id: 2, name: "Sunway Pyramid", location: "Subang Jaya", state: "Selangor", rating: 4.7, type: "Mall", category: "Family", image: "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&w=500&q=80", hours: "10 AM - 10 PM" },
-    { id: 3, name: "Jonker Street", location: "Malacca City", state: "Melaka", rating: 4.6, type: "Street", category: "Heritage", image: "https://images.unsplash.com/photo-1583037189850-1921ae7c6c22?auto=format&fit=crop&w=500&q=80", hours: "9 AM - 6 PM" },
-    { id: 4, name: "Queensbay Mall", location: "Bayan Lepas", state: "Penang", rating: 4.5, type: "Mall", category: "Electronics", image: "https://images.unsplash.com/photo-1519500099198-c185fba3b7e5?auto=format&fit=crop&w=500&q=80", hours: "10 AM - 10 PM" },
-    { id: 5, name: "The Curve", location: "Petaling Jaya", state: "Selangor", rating: 4.6, type: "Mall", category: "Lifestyle", image: "https://images.unsplash.com/photo-1555529669-e69e7aa0ba9a?auto=format&fit=crop&w=500&q=80", hours: "10 AM - 10 PM" },
-    { id: 6, name: "Komtar", location: "George Town", state: "Penang", rating: 4.4, type: "Mall", category: "Local", image: "https://images.unsplash.com/photo-1594206801227-c28ddb73a5e3?auto=format&fit=crop&w=500&q=80", hours: "9 AM - 9 PM" },
-    { id: 7, name: "IOI City Mall", location: "Putrajaya", state: "Selangor", rating: 4.7, type: "Mall", category: "Family", image: "https://images.unsplash.com/photo-1567958451986-2de427a4a0be?auto=format&fit=crop&w=500&q=80", hours: "10 AM - 10 PM" },
-    { id: 8, name: "Aeon Tebrau City", location: "Johor Bahru", state: "Johor", rating: 4.5, type: "Mall", category: "Hypermarket", image: "https://images.unsplash.com/photo-1580613034299-b1043f5d8ee6?auto=format&fit=crop&w=500&q=80", hours: "10 AM - 10 PM" },
-];
+import { fetchMalls } from '../lib/api';
 
 export default function ShoppingPage() {
     const navigate = useNavigate();
@@ -20,15 +10,48 @@ export default function ShoppingPage() {
     const [selectedState, setSelectedState] = useState('all');
     const [selectedCategory, setSelectedCategory] = useState('all');
 
-    const filteredPlaces = SHOPPING_PLACES.filter(place => {
-        if (selectedState !== 'all' && place.state !== selectedState) return false;
-        if (selectedCategory !== 'all' && place.category !== selectedCategory) return false;
+    const [malls, setMalls] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    // Fetch malls on mount
+    useEffect(() => {
+        const loadMalls = async () => {
+            try {
+                setLoading(true);
+                const data = await fetchMalls();
+                setMalls(data);
+            } catch (error) {
+                console.error('Failed to load malls:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadMalls();
+    }, []);
+
+    const filteredPlaces = malls.filter(place => {
+        const locationText = (place.state || place.location || '').toLowerCase();
+        const typeText = (place.type || '').toLowerCase();
+
+        if (selectedState !== 'all' && locationText.indexOf(selectedState.toLowerCase()) === -1) return false;
+        if (selectedCategory !== 'all' && typeText !== selectedCategory.toLowerCase()) return false;
+
         if (searchQuery.trim()) {
             const query = searchQuery.toLowerCase();
-            return place.name.toLowerCase().includes(query) || place.location.toLowerCase().includes(query);
+            const name = (place.name || '').toLowerCase();
+            const location = (place.location || '').toLowerCase();
+            return name.includes(query) || location.includes(query);
         }
         return true;
     });
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-batik flex items-center justify-center">
+                <p className="text-xl font-bold animate-pulse">Loading shopping places...</p>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-batik pb-24">
@@ -42,6 +65,7 @@ export default function ShoppingPage() {
                     <p className="text-sm text-muted-foreground font-medium">Find the best malls and shopping streets</p>
                 </div>
 
+                {/* Filters */}
                 <div className="mb-6 space-y-3">
                     <div className="relative">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
@@ -76,35 +100,39 @@ export default function ShoppingPage() {
                     </div>
                 </div>
 
+                {/* List */}
                 <div className="space-y-4">
                     {filteredPlaces.length > 0 ? (
                         filteredPlaces.map((place) => (
                             <Card
                                 key={place.id}
-                                onClick={() => navigate(`/shopping/mall/${place.id}`)}
+                                onClick={() => navigate(`/shopping/mall/${place.id}`, { state: { mall: place } })}
                                 className="overflow-hidden cursor-pointer group border-2 border-white/50 hover:shadow-xl transition-all rounded-[28px]"
                             >
                                 <CardContent className="p-0">
                                     <div className="flex gap-4">
                                         <div className="w-28 h-28 shrink-0 relative overflow-hidden">
-                                            <img src={place.image} alt={place.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                            <img src={place.image_url || place.image} alt={place.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                                         </div>
                                         <div className="flex-1 py-3 pr-4">
                                             <h4 className="font-black text-sm mb-1">{place.name}</h4>
                                             <div className="flex items-center gap-1 mb-1">
                                                 <MapPin className="h-3 w-3 text-primary" />
-                                                <span className="text-[10px] font-bold text-muted-foreground">{place.location}, {place.state}</span>
+                                                <span className="text-[10px] font-bold text-muted-foreground">
+                                                    {place.location || place.location_name}
+                                                    {place.state ? `, ${place.state}` : ''}
+                                                </span>
                                             </div>
                                             <div className="flex items-center gap-1 mb-2">
                                                 <Clock className="h-3 w-3 text-muted-foreground" />
-                                                <span className="text-[10px] text-muted-foreground">{place.hours}</span>
+                                                <span className="text-[10px] text-muted-foreground">{place.hours || '10 AM - 10 PM'}</span>
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <div className="flex items-center gap-1">
                                                     <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
-                                                    <span className="text-[11px] font-black">{place.rating}</span>
+                                                    <span className="text-[11px] font-black">{place.rating || 0}</span>
                                                 </div>
-                                                <span className="text-[10px] px-2 py-1 bg-primary/10 text-primary rounded-full font-bold">{place.category}</span>
+                                                <span className="text-[10px] px-2 py-1 bg-primary/10 text-primary rounded-full font-bold">{place.type || place.category || 'Mall'}</span>
                                             </div>
                                         </div>
                                     </div>

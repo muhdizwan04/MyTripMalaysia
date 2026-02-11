@@ -1,16 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, User, Heart, Bookmark, MessageCircle, LayoutGrid, Settings } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/Card';
 import FeedPost from '../components/feed/FeedPost';
 import { FEED_POSTS } from '../lib/constants';
+import { fetchUserProfile } from '../lib/api';
 
 export default function Profile() {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('posts');
 
-    // Mock user data - will be replaced with real data later
-    const userData = {
+    // API State
+    const [userData, setUserData] = useState({
         name: "John Traveler",
         username: "@johntraveler",
         bio: "Exploring Malaysia one state at a time 🇲🇾✨",
@@ -19,7 +20,39 @@ export default function Profile() {
             posts: 8,
             saved: 24
         }
-    };
+    });
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    // Fetch user profile from backend
+    useEffect(() => {
+        const loadUserProfile = async () => {
+            try {
+                setLoading(true);
+                setError(null);
+                const data = await fetchUserProfile('john_traveler');
+
+                // Map Firebase data to component structure
+                setUserData({
+                    name: data.full_name || "John Traveler",
+                    username: `@${data.username}` || "@johntraveler",
+                    bio: data.bio || "Exploring Malaysia one state at a time 🇲🇾✨",
+                    stats: {
+                        trips: data.counts?.trips || 0,
+                        posts: data.counts?.posts || 0,
+                        saved: data.counts?.saved || 0
+                    }
+                });
+            } catch (err) {
+                console.error('Failed to load user profile:', err);
+                setError('Failed to load profile. Using defaults.');
+                // Keep default values if API fails
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadUserProfile();
+    }, []);
 
     // Mock activity data - use FEED_POSTS as examples
     const activityData = {
@@ -68,6 +101,18 @@ export default function Profile() {
                             <p className="text-sm leading-relaxed">{userData.bio}</p>
                         </div>
                     </div>
+
+                    {/* Loading/Error State */}
+                    {loading && (
+                        <div className="text-center py-4">
+                            <div className="animate-spin h-6 w-6 border-3 border-primary border-t-transparent rounded-full mx-auto"></div>
+                        </div>
+                    )}
+                    {error && !loading && (
+                        <div className="text-center py-2">
+                            <p className="text-xs text-red-500">⚠️ {error}</p>
+                        </div>
+                    )}
 
                     {/* Stats */}
                     <div className="grid grid-cols-3 gap-4">

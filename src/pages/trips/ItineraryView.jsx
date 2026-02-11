@@ -8,6 +8,8 @@ import { Clock, MapPin, DollarSign, Loader2, ArrowLeft, Bus, Car, Star, X, Info,
 import TripMap from '../../components/trips/TripMap';
 import ActivityDetailsModal from '../../components/trips/ActivityDetailsModal';
 import { useCurrency } from '../../context/CurrencyContext';
+import { getValidationRules } from '../../lib/api';
+import { validateItinerary } from '../../lib/validationUtils';
 
 export default function ItineraryView() {
     const location = useLocation();
@@ -27,6 +29,9 @@ export default function ItineraryView() {
     const [showShareModal, setShowShareModal] = useState(false);
     const [dismissedAlerts, setDismissedAlerts] = useState({});
     const [tripMembers, setTripMembers] = useState(['You']);
+    const [showMap, setShowMap] = useState(true);
+    const [validationRules, setValidationRules] = useState(null);
+    const [dayWarnings, setDayWarnings] = useState({});
     const mapRef = React.useRef(null);
 
     useEffect(() => {
@@ -38,6 +43,21 @@ export default function ItineraryView() {
             setTripMembers(['You', 'Sarah', 'Amir']);
         }
     }, []);
+
+    // Fetch validation rules
+    useEffect(() => {
+        getValidationRules().then(rules => {
+            setValidationRules(rules);
+        });
+    }, []);
+
+    // Validate itinerary when it changes
+    useEffect(() => {
+        if (!validationRules || !itinerary.length) return;
+
+        const warnings = validateItinerary(itinerary, validationRules);
+        setDayWarnings(warnings);
+    }, [itinerary, validationRules]);
 
     const isPreview = tripData.mode === 'preview';
     const [showEditConfirm, setShowEditConfirm] = useState(false);
@@ -109,7 +129,7 @@ export default function ItineraryView() {
 
                     const findActivity = (state, category, type, nearCoords = null) => {
                         const stateSpecific = STATE_ACTIVITIES[state] || [];
-                        const pool = [...stateSpecific, ...DEFAULT_ACTIVITIES];
+                        const pool = [...stateSpecific];
 
                         let candidates = pool.filter(a =>
                             (a.category === category || a.type === type) && !usedActivityIds.has(a.id)
@@ -178,7 +198,9 @@ export default function ItineraryView() {
                             });
 
                             let act = userMatch;
-                            if (!act) {
+                            // Only auto-fill if NO activities were selected by the user for the entire trip
+                            // This ensures manual picks are respected strictly.
+                            if (!act && (!userSelectedActivities || userSelectedActivities.length === 0)) {
                                 act = findActivity(state, slot.category, slot.type);
                             }
 
@@ -600,6 +622,35 @@ export default function ItineraryView() {
                                     </div>
                                 </CardHeader>
                                 <CardContent className="px-0 relative p-0">
+                                    {/* Validation Warnings */}
+                                    {dayWarnings[day.day] && dayWarnings[day.day].length > 0 && (
+                                        <div className="ml-28 mr-4 mb-4 space-y-2">
+                                            {dayWarnings[day.day].map((warning, wIdx) => (
+                                                <div
+                                                    key={wIdx}
+                                                    className={`flex items-center gap-3 p-3 rounded-xl border-2 ${warning.severity === 'error'
+                                                        ? 'bg-red-50 border-red-200'
+                                                        : 'bg-yellow-50 border-yellow-200'
+                                                        }`}
+                                                >
+                                                    <AlertTriangle className={`h-4 w-4 flex-shrink-0 ${warning.severity === 'error' ? 'text-red-600' : 'text-yellow-600'
+                                                        }`} />
+                                                    <div className="flex-1">
+                                                        <span className={`text-xs font-bold ${warning.severity === 'error' ? 'text-red-700' : 'text-yellow-700'
+                                                            }`}>
+                                                            {warning.message}
+                                                        </span>
+                                                        {warning.detail && (
+                                                            <p className={`text-[10px] mt-0.5 ${warning.severity === 'error' ? 'text-red-600' : 'text-yellow-600'
+                                                                }`}>
+                                                                {warning.detail}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                     {/* Warnings */}
                                     {(day.activities && day.activities.filter(a => a.type !== 'transport').length > ITINERARY_RULES.warningThresholds.busyDay && !dismissedAlerts[`busy-${dIdx}`]) && (
                                         <div className="ml-28 mr-4 mb-6 bg-orange-50 border border-orange-200 p-4 rounded-2xl flex items-start gap-3 relative z-10 shadow-sm animate-in zoom-in-95">
@@ -865,258 +916,260 @@ export default function ItineraryView() {
                 </div>
 
                 {/* Sticky Sidebar Map & Summary */}
-                <div className="lg:col-span-4" ref={mapRef}>
-                    <div className="sticky top-10 space-y-8">
-                        {/* Map View */}
-                        <div className="rounded-[40px] overflow-hidden border-8 border-background shadow-2xl relative h-80">
-                            {/* Pass items with isPast flag */}
-                            <TripMap items={itinerary.map(day => ({
-                                ...day,
-                                activities: day.activities?.map(act => ({
-                                    ...act,
-                                    isPast: isActivityPast(day.day, act.time)
-                                }))
-                            }))} />
-                            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-background/80 backdrop-blur-md px-6 py-2 rounded-full border border-primary/20 shadow-xl">
-                                <span className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-2">
-                                    <MapPin className="h-3 w-3" /> Map Active
-                                </span>
+                {showMap && (
+                    <div className="lg:col-span-4" ref={mapRef}>
+                        <div className="sticky top-10 space-y-8">
+                            {/* Map View */}
+                            <div className="rounded-[40px] overflow-hidden border-8 border-background shadow-2xl relative h-80">
+                                {/* Pass items with isPast flag */}
+                                <TripMap items={itinerary.map(day => ({
+                                    ...day,
+                                    activities: day.activities?.map(act => ({
+                                        ...act,
+                                        isPast: isActivityPast(day.day, act.time)
+                                    }))
+                                }))} />
+                                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-background/80 backdrop-blur-md px-6 py-2 rounded-full border border-primary/20 shadow-xl">
+                                    <span className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-2">
+                                        <MapPin className="h-3 w-3" /> Map Active
+                                    </span>
+                                </div>
                             </div>
-                        </div>
 
-                        {/* Bill Splitter & Crew Management */}
-                        <Card className="rounded-[40px] border-none bg-white shadow-2xl overflow-hidden border-2 border-muted">
-                            <CardHeader className="bg-muted/30 pb-6 p-8">
-                                <div className="flex items-center justify-between">
-                                    <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
-                                        <Users className="h-4 w-4 text-primary" /> Trip Members
-                                    </CardTitle>
-                                    <Button variant="ghost" size="sm" className="h-8 w-8 rounded-full bg-primary/10 text-primary" onClick={() => navigate('/trips/expenses')}>
-                                        <Plus className="h-4 w-4" />
-                                    </Button>
-                                </div>
-                            </CardHeader>
-                            <CardContent className="p-8 space-y-6">
-                                <div className="flex -space-x-4">
-                                    {tripMembers.map((m, i) => (
-                                        <div key={i} className="h-12 w-12 rounded-full border-4 border-white bg-primary/10 flex items-center justify-center text-xs font-black ring-2 ring-primary/5">
-                                            {m[0]}
-                                        </div>
-                                    ))}
-                                    <button
-                                        onClick={() => navigate('/trips/expenses')}
-                                        className="h-12 w-12 rounded-full border-4 border-white bg-muted flex items-center justify-center text-xs font-black hover:bg-primary/10 transition-colors"
-                                    >
-                                        <Plus className="h-4 w-4" />
-                                    </button>
-                                </div>
-                                <div className="h-px bg-muted w-full"></div>
-                                <Button
-                                    onClick={() => navigate('/trips/expenses')}
-                                    className="w-full h-16 bg-primary text-white rounded-3xl font-black shadow-xl shadow-primary/20 flex items-center justify-center gap-3 transition-all active:scale-95"
-                                >
-                                    <DollarSign className="h-5 w-5" /> GO TO BILL SPLITTER
-                                </Button>
-                            </CardContent>
-                        </Card>
-
-                        {/* Accommodation Info */}
-                        {tripData.accommodation && Object.keys(tripData.accommodation).length > 0 && (
+                            {/* Bill Splitter & Crew Management */}
                             <Card className="rounded-[40px] border-none bg-white shadow-2xl overflow-hidden border-2 border-muted">
-                                <CardContent className="p-8 space-y-4">
+                                <CardHeader className="bg-muted/30 pb-6 p-8">
                                     <div className="flex items-center justify-between">
-                                        <div className="text-[10px] font-black uppercase tracking-widest text-primary opacity-60">Your Stay</div>
+                                        <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
+                                            <Users className="h-4 w-4 text-primary" /> Trip Members
+                                        </CardTitle>
+                                        <Button variant="ghost" size="sm" className="h-8 w-8 rounded-full bg-primary/10 text-primary" onClick={() => navigate('/trips/expenses')}>
+                                            <Plus className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="p-8 space-y-6">
+                                    <div className="flex -space-x-4">
+                                        {tripMembers.map((m, i) => (
+                                            <div key={i} className="h-12 w-12 rounded-full border-4 border-white bg-primary/10 flex items-center justify-center text-xs font-black ring-2 ring-primary/5">
+                                                {m[0]}
+                                            </div>
+                                        ))}
+                                        <button
+                                            onClick={() => navigate('/trips/expenses')}
+                                            className="h-12 w-12 rounded-full border-4 border-white bg-muted flex items-center justify-center text-xs font-black hover:bg-primary/10 transition-colors"
+                                        >
+                                            <Plus className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                    <div className="h-px bg-muted w-full"></div>
+                                    <Button
+                                        onClick={() => navigate('/trips/expenses')}
+                                        className="w-full h-16 bg-primary text-white rounded-3xl font-black shadow-xl shadow-primary/20 flex items-center justify-center gap-3 transition-all active:scale-95"
+                                    >
+                                        <DollarSign className="h-5 w-5" /> GO TO BILL SPLITTER
+                                    </Button>
+                                </CardContent>
+                            </Card>
+
+                            {/* Accommodation Info */}
+                            {tripData.accommodation && Object.keys(tripData.accommodation).length > 0 && (
+                                <Card className="rounded-[40px] border-none bg-white shadow-2xl overflow-hidden border-2 border-muted">
+                                    <CardContent className="p-8 space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <div className="text-[10px] font-black uppercase tracking-widest text-primary opacity-60">Your Stay</div>
+                                            {(() => {
+                                                const firstStay = tripData.accommodation[1];
+                                                const isMixed = Object.values(tripData.accommodation).some(s => s.id !== firstStay?.id);
+                                                if (!isMixed && firstStay) {
+                                                    return (
+                                                        <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-400/10 text-yellow-600 text-[10px] font-black">
+                                                            <Star className="h-3 w-3 fill-current" /> {firstStay.rating}
+                                                        </div>
+                                                    );
+                                                }
+                                                return null;
+                                            })()}
+                                        </div>
+
                                         {(() => {
                                             const firstStay = tripData.accommodation[1];
                                             const isMixed = Object.values(tripData.accommodation).some(s => s.id !== firstStay?.id);
-                                            if (!isMixed && firstStay) {
+
+                                            if (isMixed) {
                                                 return (
-                                                    <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-400/10 text-yellow-600 text-[10px] font-black">
-                                                        <Star className="h-3 w-3 fill-current" /> {firstStay.rating}
+                                                    <div className="flex gap-5 items-center">
+                                                        <div className="h-20 w-20 rounded-2xl bg-primary/10 flex items-center justify-center">
+                                                            <MapPin className="h-8 w-8 text-primary" />
+                                                        </div>
+                                                        <div className="flex-1 flex flex-col justify-center">
+                                                            <h3 className="font-black text-lg text-primary tracking-tight leading-tight">Multiple Stays</h3>
+                                                            <p className="text-xs font-bold text-muted-foreground">Check itinerary for daily details</p>
+                                                        </div>
                                                     </div>
+                                                );
+                                            } else if (firstStay) {
+                                                return (
+                                                    <>
+                                                        <div className="flex gap-5">
+                                                            <img src={firstStay.image} className="h-20 w-20 rounded-2xl object-cover shadow-sm" alt="" />
+                                                            <div className="flex-1 flex flex-col justify-center">
+                                                                <h3 className="font-black text-lg text-primary tracking-tight leading-tight">{firstStay.name}</h3>
+                                                                <p className="text-xs font-bold text-muted-foreground flex items-center gap-1">
+                                                                    <MapPin className="h-3 w-3 opacity-40" /> {firstStay.location}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="pt-4 border-t border-muted flex justify-between items-center">
+                                                            <p className="font-black text-primary">RM {firstStay.price}<span className="text-[10px] font-bold opacity-40 ml-1">/ NIGHT</span></p>
+                                                            <div className="px-3 py-1 rounded-full bg-primary/5 text-primary text-[10px] font-black uppercase tracking-widest">Full Trip</div>
+                                                        </div>
+                                                    </>
                                                 );
                                             }
                                             return null;
                                         })()}
-                                    </div>
+                                    </CardContent>
+                                </Card>
+                            )}
 
-                                    {(() => {
-                                        const firstStay = tripData.accommodation[1];
-                                        const isMixed = Object.values(tripData.accommodation).some(s => s.id !== firstStay?.id);
+                            {/* Transport Info */}
+                            {tripData.transportMode && (
+                                <Card className="rounded-[40px] border-none bg-white shadow-2xl overflow-hidden border-2 border-muted">
+                                    <CardContent className="p-8 space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <div className="text-[10px] font-black uppercase tracking-widest text-primary opacity-60">
+                                                {tripData.transportMode === 'own' ? 'Transport Costs' : 'Route Guide'}
+                                            </div>
+                                            <div className={`h-10 w-10 rounded-2xl flex items-center justify-center ${tripData.transportMode === 'own' ? 'bg-primary/10' : 'bg-emerald-500/10'
+                                                }`}>
+                                                {tripData.transportMode === 'own' ? (
+                                                    <Car className="h-5 w-5 text-primary" />
+                                                ) : (
+                                                    <Bus className="h-5 w-5 text-emerald-600" />
+                                                )}
+                                            </div>
+                                        </div>
 
-                                        if (isMixed) {
-                                            return (
-                                                <div className="flex gap-5 items-center">
-                                                    <div className="h-20 w-20 rounded-2xl bg-primary/10 flex items-center justify-center">
-                                                        <MapPin className="h-8 w-8 text-primary" />
-                                                    </div>
-                                                    <div className="flex-1 flex flex-col justify-center">
-                                                        <h3 className="font-black text-lg text-primary tracking-tight leading-tight">Multiple Stays</h3>
-                                                        <p className="text-xs font-bold text-muted-foreground">Check itinerary for daily details</p>
-                                                    </div>
+                                        {tripData.transportMode === 'own' ? (
+                                            /* Own Transport - Show Toll + Gas Estimates */
+                                            <div className="space-y-3">
+                                                <div className="flex justify-between items-center bg-muted/20 p-4 rounded-2xl">
+                                                    <span className="text-sm font-bold text-muted-foreground">Est. Toll</span>
+                                                    <span className="font-black text-primary">RM {TRANSPORT_ESTIMATES.ownTransport.toll.default * (tripData.locations?.length || 1)}</span>
                                                 </div>
-                                            );
-                                        } else if (firstStay) {
-                                            return (
-                                                <>
-                                                    <div className="flex gap-5">
-                                                        <img src={firstStay.image} className="h-20 w-20 rounded-2xl object-cover shadow-sm" alt="" />
-                                                        <div className="flex-1 flex flex-col justify-center">
-                                                            <h3 className="font-black text-lg text-primary tracking-tight leading-tight">{firstStay.name}</h3>
-                                                            <p className="text-xs font-bold text-muted-foreground flex items-center gap-1">
-                                                                <MapPin className="h-3 w-3 opacity-40" /> {firstStay.location}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="pt-4 border-t border-muted flex justify-between items-center">
-                                                        <p className="font-black text-primary">RM {firstStay.price}<span className="text-[10px] font-bold opacity-40 ml-1">/ NIGHT</span></p>
-                                                        <div className="px-3 py-1 rounded-full bg-primary/5 text-primary text-[10px] font-black uppercase tracking-widest">Full Trip</div>
-                                                    </div>
-                                                </>
-                                            );
-                                        }
-                                        return null;
-                                    })()}
-                                </CardContent>
-                            </Card>
-                        )}
-
-                        {/* Transport Info */}
-                        {tripData.transportMode && (
-                            <Card className="rounded-[40px] border-none bg-white shadow-2xl overflow-hidden border-2 border-muted">
-                                <CardContent className="p-8 space-y-4">
-                                    <div className="flex items-center justify-between">
-                                        <div className="text-[10px] font-black uppercase tracking-widest text-primary opacity-60">
-                                            {tripData.transportMode === 'own' ? 'Transport Costs' : 'Route Guide'}
-                                        </div>
-                                        <div className={`h-10 w-10 rounded-2xl flex items-center justify-center ${tripData.transportMode === 'own' ? 'bg-primary/10' : 'bg-emerald-500/10'
-                                            }`}>
-                                            {tripData.transportMode === 'own' ? (
-                                                <Car className="h-5 w-5 text-primary" />
-                                            ) : (
-                                                <Bus className="h-5 w-5 text-emerald-600" />
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {tripData.transportMode === 'own' ? (
-                                        /* Own Transport - Show Toll + Gas Estimates */
-                                        <div className="space-y-3">
-                                            <div className="flex justify-between items-center bg-muted/20 p-4 rounded-2xl">
-                                                <span className="text-sm font-bold text-muted-foreground">Est. Toll</span>
-                                                <span className="font-black text-primary">RM {TRANSPORT_ESTIMATES.ownTransport.toll.default * (tripData.locations?.length || 1)}</span>
-                                            </div>
-                                            <div className="flex justify-between items-center bg-muted/20 p-4 rounded-2xl">
-                                                <span className="text-sm font-bold text-muted-foreground">Est. Gas</span>
-                                                <span className="font-black text-primary">
-                                                    RM {(TRANSPORT_ESTIMATES.ownTransport.gas.perKm * TRANSPORT_ESTIMATES.ownTransport.gas.avgDistance * (tripData.locations?.length || 1)).toFixed(2)}
-                                                </span>
-                                            </div>
-                                            <div className="pt-4 border-t border-muted">
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-xs font-black uppercase text-muted-foreground">Total Transport</span>
-                                                    <span className="text-xl font-black text-primary">
-                                                        RM {(
-                                                            TRANSPORT_ESTIMATES.ownTransport.toll.default * (tripData.locations?.length || 1) +
-                                                            TRANSPORT_ESTIMATES.ownTransport.gas.perKm * TRANSPORT_ESTIMATES.ownTransport.gas.avgDistance * (tripData.locations?.length || 1)
-                                                        ).toFixed(2)}
+                                                <div className="flex justify-between items-center bg-muted/20 p-4 rounded-2xl">
+                                                    <span className="text-sm font-bold text-muted-foreground">Est. Gas</span>
+                                                    <span className="font-black text-primary">
+                                                        RM {(TRANSPORT_ESTIMATES.ownTransport.gas.perKm * TRANSPORT_ESTIMATES.ownTransport.gas.avgDistance * (tripData.locations?.length || 1)).toFixed(2)}
                                                     </span>
                                                 </div>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        /* Public Transport - Show Routes */
-                                        <div className="space-y-3">
-                                            {tripData.locations?.map((state, index) => (
-                                                <div key={state} className="space-y-2">
-                                                    <p className="text-xs font-black uppercase text-muted-foreground">{state}</p>
-                                                    <p className="text-sm font-bold text-foreground leading-relaxed">
-                                                        {TRANSPORT_ESTIMATES.publicTransport.routes[state] || TRANSPORT_ESTIMATES.publicTransport.routes.default}
-                                                    </p>
-                                                    {index < (tripData.locations?.length || 0) - 1 && (
-                                                        <div className="mt-2 pt-2 border-t border-dashed border-muted">
-                                                            <p className="text-xs font-black text-primary opacity-60">TO NEXT STATE</p>
-                                                            <p className="text-xs font-bold text-muted-foreground">
-                                                                {TRANSPORT_ESTIMATES.publicTransport.interState.default}
-                                                            </p>
-                                                        </div>
-                                                    )}
+                                                <div className="pt-4 border-t border-muted">
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-xs font-black uppercase text-muted-foreground">Total Transport</span>
+                                                        <span className="text-xl font-black text-primary">
+                                                            RM {(
+                                                                TRANSPORT_ESTIMATES.ownTransport.toll.default * (tripData.locations?.length || 1) +
+                                                                TRANSPORT_ESTIMATES.ownTransport.gas.perKm * TRANSPORT_ESTIMATES.ownTransport.gas.avgDistance * (tripData.locations?.length || 1)
+                                                            ).toFixed(2)}
+                                                        </span>
+                                                    </div>
                                                 </div>
-                                            ))}
+                                            </div>
+                                        ) : (
+                                            /* Public Transport - Show Routes */
+                                            <div className="space-y-3">
+                                                {tripData.locations?.map((state, index) => (
+                                                    <div key={state} className="space-y-2">
+                                                        <p className="text-xs font-black uppercase text-muted-foreground">{state}</p>
+                                                        <p className="text-sm font-bold text-foreground leading-relaxed">
+                                                            {TRANSPORT_ESTIMATES.publicTransport.routes[state] || TRANSPORT_ESTIMATES.publicTransport.routes.default}
+                                                        </p>
+                                                        {index < (tripData.locations?.length || 0) - 1 && (
+                                                            <div className="mt-2 pt-2 border-t border-dashed border-muted">
+                                                                <p className="text-xs font-black text-primary opacity-60">TO NEXT STATE</p>
+                                                                <p className="text-xs font-bold text-muted-foreground">
+                                                                    {TRANSPORT_ESTIMATES.publicTransport.interState.default}
+                                                                </p>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </CardContent>
+                                </Card>
+                            )}
+
+                            {/* Trip Strategy Summary */}
+                            <Card className="rounded-[40px] border-none bg-[#0a0a0a] text-white shadow-2xl overflow-hidden relative">
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-16 -mt-16"></div>
+                                <CardContent className="p-8 space-y-6">
+                                    <h3 className="text-xl font-black tracking-tight uppercase tracking-widest text-[11px] opacity-70">Strategy Summary</h3>
+
+                                    <div className="space-y-4 pt-2">
+                                        <div className="flex justify-between items-center bg-white/5 p-4 rounded-3xl border border-white/5">
+                                            <div className="flex items-center gap-3">
+                                                <Calendar className="h-5 w-5 opacity-60" />
+                                                <span className="text-sm font-bold opacity-80">Duration</span>
+                                            </div>
+                                            <span className="font-black text-xl">{tripData.duration || 3} Days</span>
                                         </div>
-                                    )}
+                                        <div className="flex justify-between items-center bg-white/5 p-4 rounded-3xl border border-white/5">
+                                            <div className="flex items-center gap-3">
+                                                <Users className="h-5 w-5 opacity-60" />
+                                                <span className="text-sm font-bold opacity-80">Party Size</span>
+                                            </div>
+                                            <span className="font-black text-xl">{tripData.guests || 2} Pax</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="h-px bg-white/10 w-full"></div>
+
+                                    <div className="flex justify-between items-end">
+                                        <div className="space-y-1">
+                                            <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Estimated Cost</span>
+                                            <p className="text-3xl font-black">{formatPrice(
+                                                (itinerary.reduce((acc, d) => acc + (d.activities ? d.activities.reduce((a, s) => a + (s.price || 0), 0) : 0), 0) +
+                                                    (tripData.accommodation ? Object.values(tripData.accommodation).reduce((acc, stay) => acc + (stay.price || 0), 0) : 0)) * (tripData.guests || 1)
+                                            )}</p>
+                                        </div>
+                                        <div className="h-10 w-10 rounded-2xl bg-white/20 flex items-center justify-center">
+                                            <DollarSign className="h-6 w-6" />
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-3">
+                                        {isPreview ? (
+                                            <Button
+                                                onClick={handleStartPlanning}
+                                                className="w-full h-14 bg-white text-primary hover:bg-white/90 rounded-[28px] font-black text-xl shadow-2xl group transition-all"
+                                            >
+                                                Start Planning with this Template <ArrowRight className="ml-2 h-6 w-6 group-hover:translate-x-1.5 transition-transform" />
+                                            </Button>
+                                        ) : (
+                                            <>
+                                                <Button
+                                                    variant="outline"
+                                                    onClick={() => setShowShareModal(true)}
+                                                    className="flex-1 h-14 bg-white/10 text-white border-white/10 hover:bg-white/20 rounded-[28px] font-black text-lg transition-all"
+                                                >
+                                                    <Share2 className="mr-2 h-5 w-5" /> Share
+                                                </Button>
+                                                <Button
+                                                    onClick={handleSaveTrip}
+                                                    className="flex-[2] h-14 bg-white text-primary hover:bg-white/90 rounded-[28px] font-black text-xl shadow-2xl group transition-all"
+                                                >
+                                                    Confirm Plan <ArrowRight className="ml-2 h-6 w-6 group-hover:translate-x-1.5 transition-transform" />
+                                                </Button>
+                                            </>
+                                        )}
+                                    </div>
                                 </CardContent>
                             </Card>
-                        )}
-
-                        {/* Trip Strategy Summary */}
-                        <Card className="rounded-[40px] border-none bg-[#0a0a0a] text-white shadow-2xl overflow-hidden relative">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-16 -mt-16"></div>
-                            <CardContent className="p-8 space-y-6">
-                                <h3 className="text-xl font-black tracking-tight uppercase tracking-widest text-[11px] opacity-70">Strategy Summary</h3>
-
-                                <div className="space-y-4 pt-2">
-                                    <div className="flex justify-between items-center bg-white/5 p-4 rounded-3xl border border-white/5">
-                                        <div className="flex items-center gap-3">
-                                            <Calendar className="h-5 w-5 opacity-60" />
-                                            <span className="text-sm font-bold opacity-80">Duration</span>
-                                        </div>
-                                        <span className="font-black text-xl">{tripData.duration || 3} Days</span>
-                                    </div>
-                                    <div className="flex justify-between items-center bg-white/5 p-4 rounded-3xl border border-white/5">
-                                        <div className="flex items-center gap-3">
-                                            <Users className="h-5 w-5 opacity-60" />
-                                            <span className="text-sm font-bold opacity-80">Party Size</span>
-                                        </div>
-                                        <span className="font-black text-xl">{tripData.guests || 2} Pax</span>
-                                    </div>
-                                </div>
-
-                                <div className="h-px bg-white/10 w-full"></div>
-
-                                <div className="flex justify-between items-end">
-                                    <div className="space-y-1">
-                                        <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Estimated Cost</span>
-                                        <p className="text-3xl font-black">{formatPrice(
-                                            (itinerary.reduce((acc, d) => acc + (d.activities ? d.activities.reduce((a, s) => a + (s.price || 0), 0) : 0), 0) +
-                                                (tripData.accommodation ? Object.values(tripData.accommodation).reduce((acc, stay) => acc + (stay.price || 0), 0) : 0)) * (tripData.guests || 1)
-                                        )}</p>
-                                    </div>
-                                    <div className="h-10 w-10 rounded-2xl bg-white/20 flex items-center justify-center">
-                                        <DollarSign className="h-6 w-6" />
-                                    </div>
-                                </div>
-
-                                <div className="flex gap-3">
-                                    {isPreview ? (
-                                        <Button
-                                            onClick={handleStartPlanning}
-                                            className="w-full h-14 bg-white text-primary hover:bg-white/90 rounded-[28px] font-black text-xl shadow-2xl group transition-all"
-                                        >
-                                            Start Planning with this Template <ArrowRight className="ml-2 h-6 w-6 group-hover:translate-x-1.5 transition-transform" />
-                                        </Button>
-                                    ) : (
-                                        <>
-                                            <Button
-                                                variant="outline"
-                                                onClick={() => setShowShareModal(true)}
-                                                className="flex-1 h-14 bg-white/10 text-white border-white/10 hover:bg-white/20 rounded-[28px] font-black text-lg transition-all"
-                                            >
-                                                <Share2 className="mr-2 h-5 w-5" /> Share
-                                            </Button>
-                                            <Button
-                                                onClick={handleSaveTrip}
-                                                className="flex-[2] h-14 bg-white text-primary hover:bg-white/90 rounded-[28px] font-black text-xl shadow-2xl group transition-all"
-                                            >
-                                                Confirm Plan <ArrowRight className="ml-2 h-6 w-6 group-hover:translate-x-1.5 transition-transform" />
-                                            </Button>
-                                        </>
-                                    )}
-                                </div>
-                            </CardContent>
-                        </Card>
+                        </div>
                     </div>
-                </div>
+                )}
 
                 <ActivityDetailsModal
                     isOpen={!!selectedActivity}

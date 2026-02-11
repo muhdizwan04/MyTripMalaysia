@@ -3,19 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Search, MapPin, Star, DollarSign } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/Card';
 import { useCurrency } from '../context/CurrencyContext';
-
-const MUST_VISIT_PLACES = [
-    { id: 1, name: "Batu Caves", location: "Gombak", state: "Selangor", rating: 4.6, price: 0, category: "Scenery", image: "https://images.unsplash.com/photo-1544013919-4bb5cb5b77ef?auto=format&fit=crop&w=500&q=80", description: "Iconic limestone caves with Hindu shrines" },
-    { id: 2, name: "Petronas Twin Towers", location: "KLCC", state: "Kuala Lumpur", rating: 4.9, price: 85, category: "Scenery", image: "https://images.unsplash.com/photo-1508062878650-88b52897f298?auto=format&fit=crop&w=500&q=80", description: "World-famous twin skyscrapers" },
-    { id: 3, name: "Sunway Lagoon", location: "Subang Jaya", state: "Selangor", rating: 4.5, price: 180, category: "Theme Park", image: "https://images.unsplash.com/photo-1577894947058-fccf3380c8c4?auto=format&fit=crop&w=500&q=80", description: "Water park and theme park" },
-    { id: 4, name: "KL Bird Park", location: "Kuala Lumpur", state: "Kuala Lumpur", rating: 4.4, price: 65, category: "Bird Park", image: "https://images.unsplash.com/photo-1552728089-57bdde30beb3?auto=format&fit=crop&w=500&q=80", description: "World's largest free-flight aviary" },
-    { id: 5, name: "National Museum", location: "Kuala Lumpur", state: "Kuala Lumpur", rating: 4.3, price: 5, category: "Museum", image: "https://images.unsplash.com/photo-1595177437642-5ba6d9c5ef5c?auto=format&fit=crop&w=500&q=80", description: "Malaysian history and culture" },
-    { id: 6, name: "Cameron Highlands", location: "Cameron Highlands", state: "Pahang", rating: 4.7, price: 0, category: "Scenery", image: "https://images.unsplash.com/photo-1564890369478-c89ca6d9cde9?auto=format&fit=crop&w=500&q=80", description: "Beautiful tea plantations" },
-    { id: 7, name: "Langkawi SkyCab", location: "Langkawi", state: "Kedah", rating: 4.7, price: 95, category: "Activity", image: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=500&q=80", description: "Cable car with stunning views" },
-    { id: 8, name: "Legoland Malaysia", location: "Johor Bahru", state: "Johor", rating: 4.5, price: 220, category: "Theme Park", image: "https://images.unsplash.com/photo-1515542622106-78bda8ba0e5b?auto=format&fit=crop&w=500&q=80", description: "Lego-themed amusement park" },
-    { id: 9, name: "Penang National Park", location: "George Town", state: "Penang", rating: 4.6, price: 0, category: "Activity", image: "https://images.unsplash.com/photo-1501594907352-04cda38ebc29?auto=format&fit=crop&w=500&q=80", description: "Hiking trails and beaches" },
-    { id: 10, name: "Islamic Arts Museum", location: "Kuala Lumpur", state: "Kuala Lumpur", rating: 4.7, price: 14, category: "Museum", image: "https://images.unsplash.com/photo-1554066502-1ca3c75e7e49?auto=format&fit=crop&w=500&q=80", description: "Islamic art collection" },
-];
+import { fetchMustVisitAttractions } from '../lib/api';
 
 export default function MustVisitPage() {
     const navigate = useNavigate();
@@ -23,18 +11,110 @@ export default function MustVisitPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedState, setSelectedState] = useState('all');
     const [selectedCategory, setSelectedCategory] = useState('all');
+    const [selectedPlace, setSelectedPlace] = useState(null);
 
-    const filteredPlaces = MUST_VISIT_PLACES.filter(place => {
-        if (selectedState !== 'all' && place.state !== selectedState) return false;
-        if (selectedCategory !== 'all' && place.category !== selectedCategory) return false;
+    const [places, setPlaces] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    React.useEffect(() => {
+        const loadPlaces = async () => {
+            try {
+                setLoading(true);
+                const data = await fetchMustVisitAttractions();
+                console.log('Fetched must visit attractions:', data);
+                setPlaces(data);
+            } catch (error) {
+                console.error('Failed to load must visit attractions:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadPlaces();
+    }, []);
+
+    const filteredPlaces = places.filter(place => {
+        // Handle various field names for location and category
+        const placeLocation = (place.state || place.location || place.location_name || '').toLowerCase();
+        const placeCategory = (place.category || place.type || '').toLowerCase();
+
+        const stateMatch = selectedState === 'all' || placeLocation === selectedState.toLowerCase() ||
+            (selectedState === 'Kuala Lumpur' && placeLocation === 'kl') ||
+            (selectedState === 'kl' && placeLocation === 'kuala lumpur');
+
+        const categoryMatch = selectedCategory === 'all' || placeCategory === selectedCategory.toLowerCase();
+
+        if (!stateMatch || !categoryMatch) return false;
+
         if (searchQuery.trim()) {
             const query = searchQuery.toLowerCase();
-            return place.name.toLowerCase().includes(query) ||
-                place.location.toLowerCase().includes(query) ||
-                place.description.toLowerCase().includes(query);
+            return (place.name || '').toLowerCase().includes(query) ||
+                placeLocation.includes(query) ||
+                (place.description || '').toLowerCase().includes(query);
         }
         return true;
     });
+
+    // Detail Modal
+    const DetailModal = ({ place, onClose }) => {
+        if (!place) return null;
+        return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="bg-white w-full max-w-lg rounded-[32px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+                    <div className="relative h-64">
+                        <img
+                            src={place.image_url || place.image}
+                            alt={place.name}
+                            className="w-full h-full object-cover"
+                        />
+                        <button
+                            onClick={onClose}
+                            className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full transition-colors backdrop-blur-md"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+                        </button>
+                        <div className="absolute top-4 left-4 bg-primary text-white text-xs font-black px-3 py-1 rounded-full uppercase shadow-lg">
+                            {place.category || place.type}
+                        </div>
+                    </div>
+                    <div className="p-6">
+                        <h2 className="text-2xl font-black mb-2 tracking-tight">{place.name}</h2>
+                        <div className="flex items-center gap-2 mb-4">
+                            <MapPin className="h-4 w-4 text-primary" />
+                            <span className="text-sm font-bold text-muted-foreground">{place.location || place.location_name}, {place.state || place.location_name}</span>
+                        </div>
+
+                        <div className="flex items-center gap-4 mb-6">
+                            <div className="flex items-center gap-1 bg-yellow-50 px-2 py-1 rounded-lg border border-yellow-100">
+                                <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" />
+                                <span className="font-black text-sm">{place.rating}</span>
+                            </div>
+                            {place.price > 0 ? (
+                                <div className="flex items-center gap-1 bg-primary/5 px-2 py-1 rounded-lg border border-primary/10">
+                                    <DollarSign className="h-4 w-4 text-primary" />
+                                    <span className="font-black text-sm text-primary">{formatPrice(place.price)}</span>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-1 bg-green-50 px-2 py-1 rounded-lg border border-green-100">
+                                    <span className="font-black text-sm text-green-600">Free</span>
+                                </div>
+                            )}
+                        </div>
+
+                        <p className="text-sm text-gray-600 mb-8 leading-relaxed font-medium">
+                            {place.description}
+                        </p>
+
+                        <button
+                            onClick={() => navigate('/trips/create')}
+                            className="w-full h-14 bg-primary text-white rounded-2xl font-black uppercase tracking-wider shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all flex items-center justify-center hover:scale-[1.02] active:scale-[0.98]"
+                        >
+                            Add to Trip
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
 
     return (
         <div className="min-h-screen bg-batik pb-24">
@@ -69,11 +149,15 @@ export default function MustVisitPage() {
                             <option value="Johor">Johor</option>
                             <option value="Pahang">Pahang</option>
                             <option value="Kedah">Kedah</option>
+                            <option value="Melaka">Melaka</option>
+                            <option value="Gombak">Gombak</option>
                         </select>
 
                         <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} className="text-sm font-black px-4 py-3 rounded-2xl border-2 border-muted/50 bg-white outline-none">
                             <option value="all">All Types</option>
-                            <option value="Scenery">Scenery</option>
+                            <option value="Landmark">Landmark</option>
+                            <option value="Nature">Nature</option>
+                            <option value="Culture">Culture</option>
                             <option value="Activity">Activity</option>
                             <option value="Theme Park">Theme Park</option>
                             <option value="Bird Park">Bird Park</option>
@@ -82,49 +166,68 @@ export default function MustVisitPage() {
                     </div>
                 </div>
 
-                <div className="space-y-4">
-                    {filteredPlaces.length > 0 ? (
-                        filteredPlaces.map((place) => (
-                            <Card key={place.id} className="overflow-hidden cursor-pointer group border-2 border-white/50 hover:shadow-xl transition-all rounded-[28px]">
-                                <CardContent className="p-0">
-                                    <div className="flex gap-4">
-                                        <div className="w-28 h-28 shrink-0 relative overflow-hidden">
-                                            <img src={place.image} alt={place.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                                        </div>
-                                        <div className="flex-1 py-3 pr-4">
-                                            <h4 className="font-black text-sm mb-1">{place.name}</h4>
-                                            <div className="flex items-center gap-1 mb-1">
-                                                <MapPin className="h-3 w-3 text-primary" />
-                                                <span className="text-[10px] font-bold text-muted-foreground">{place.location}, {place.state}</span>
+                {loading ? (
+                    <div className="py-20 text-center">
+                        <div className="animate-spin h-10 w-10 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+                        <p className="text-muted-foreground font-bold">Loading attractions...</p>
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        {filteredPlaces.length > 0 ? (
+                            filteredPlaces.map((place) => (
+                                <Card
+                                    key={place.id}
+                                    onClick={() => setSelectedPlace(place)}
+                                    className="overflow-hidden cursor-pointer group border-2 border-white/50 hover:shadow-xl transition-all rounded-[28px]"
+                                >
+                                    <CardContent className="p-0">
+                                        <div className="flex gap-4">
+                                            <div className="w-28 h-28 shrink-0 relative overflow-hidden">
+                                                <img src={place.image_url || place.image} alt={place.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                                             </div>
-                                            <p className="text-[10px] text-muted-foreground mb-2">{place.description}</p>
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="flex items-center gap-1">
-                                                        <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
-                                                        <span className="text-[11px] font-black">{place.rating}</span>
-                                                    </div>
-                                                    <span className="text-[10px] px-2 py-1 bg-primary/10 text-primary rounded-full font-bold">{place.category}</span>
+                                            <div className="flex-1 py-3 pr-4">
+                                                <h4 className="font-black text-sm mb-1">{place.name}</h4>
+                                                <div className="flex items-center gap-1 mb-1">
+                                                    <MapPin className="h-3 w-3 text-primary" />
+                                                    <span className="text-[10px] font-bold text-muted-foreground">
+                                                        {place.location || place.location_name}
+                                                        {(place.state && place.state !== place.location) ? `, ${place.state}` : ''}
+                                                    </span>
                                                 </div>
-                                                {place.price > 0 && (
-                                                    <div className="flex items-center gap-1">
-                                                        <DollarSign className="h-3 w-3 text-primary" />
-                                                        <span className="text-[11px] font-black text-primary">{formatPrice(place.price)}</span>
+                                                <p className="text-[10px] text-muted-foreground mb-2 line-clamp-2">{place.description}</p>
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="flex items-center gap-1">
+                                                            <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
+                                                            <span className="text-[11px] font-black">{place.rating}</span>
+                                                        </div>
+                                                        <span className="text-[10px] px-2 py-1 bg-primary/10 text-primary rounded-full font-bold">{place.category || place.type}</span>
                                                     </div>
-                                                )}
+                                                    {place.price > 0 && (
+                                                        <div className="flex items-center gap-1">
+                                                            <DollarSign className="h-3 w-3 text-primary" />
+                                                            <span className="text-[11px] font-black text-primary">{formatPrice(place.price)}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        ))
-                    ) : (
-                        <div className="text-center py-20 bg-muted/10 rounded-3xl">
-                            <Search className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-50" />
-                            <p className="text-muted-foreground font-bold">No attractions found</p>
-                        </div>
-                    )}
-                </div>
+                                    </CardContent>
+                                </Card>
+                            ))
+                        ) : (
+                            <div className="text-center py-20 bg-muted/10 rounded-3xl">
+                                <Search className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-50" />
+                                <p className="text-muted-foreground font-bold">No attractions found</p>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Detail Modal */}
+                {selectedPlace && (
+                    <DetailModal place={selectedPlace} onClose={() => setSelectedPlace(null)} />
+                )}
             </div>
         </div>
     );
