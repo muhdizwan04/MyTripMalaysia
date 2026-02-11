@@ -35,6 +35,7 @@ const hotelRoutes = require('./routes/hotels');
 const expenseRoutes = require('./routes/expenses');
 const uploadRoutes = require('./routes/upload');
 const transportRoutes = require('./routes/transportRoutes');
+const adminRoutes = require('./routes/admin');
 
 app.use('/api/destinations', destinationRoutes);
 app.use('/api/attractions', attractionRoutes);
@@ -48,5 +49,6 @@ app.use('/api/hotels', hotelRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/transport', transportRoutes);
+app.use('/api/admin', adminRoutes);
 
 module.exports = app;

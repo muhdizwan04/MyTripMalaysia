@@ -31,6 +31,13 @@ export const deleteDestination = (id) => api.delete(`/destinations/${id}`)
         throw error;
     });
 
+export const updateDestination = (id, data) => api.put(`/destinations/${id}`, data)
+    .then(res => res.data)
+    .catch(error => {
+        console.error('API Error - updateDestination:', error.response?.data || error.message);
+        throw error;
+    });
+
 // Attractions
 export const getAttractions = (filters = {}) => api.get('/attractions', { params: filters })
     .then(res => res.data)

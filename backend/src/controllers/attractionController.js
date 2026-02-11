@@ -26,7 +26,8 @@ const create = async (req, res) => {
     try {
         const {
             name, destinationId, type, latitude, longitude, avgDuration, avgCost,
-            isMall, is_mall, is_trending, description, image_url, location, rating, ticket_price, review_count,
+            isMall, is_mall, isTrending, is_trending, isMustVisit, is_must_visit,
+            description, image_url, location, rating, ticket_price, review_count,
             price
         } = req.body;
 
@@ -46,9 +47,9 @@ const create = async (req, res) => {
 
             // Standardized fields
             price: price !== undefined ? parseFloat(price) : (avgCost ? parseFloat(avgCost) : 0),
-            is_mall: is_mall !== undefined ? !!is_mall : !!isMall,
-            is_trending: !!is_trending,
-            is_must_visit: !!req.body.is_must_visit,
+            isMall: isMall !== undefined ? !!isMall : !!is_mall,
+            isTrending: isTrending !== undefined ? !!isTrending : !!is_trending,
+            isMustVisit: isMustVisit !== undefined ? !!isMustVisit : !!is_must_visit,
 
             description: description || '',
             image_url: image_url || '',

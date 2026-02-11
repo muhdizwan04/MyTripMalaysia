@@ -30,6 +30,7 @@ export default function ExpenseTracker() {
         percentages: {}   // { 'Person1': 50 }
     });
     const [isAdding, setIsAdding] = useState(false);
+    const [editingId, setEditingId] = useState(null);
     const [settlements, setSettlements] = useState([]);
     const [history, setHistory] = useState([]); // Past settlements
 
@@ -81,8 +82,8 @@ export default function ExpenseTracker() {
             }
         }
 
-        const expense = {
-            id: Date.now(),
+        const expenseData = {
+            id: editingId || Date.now(),
             title: newExpense.title,
             amount: total,
             payer: newExpense.payer,
@@ -93,7 +94,13 @@ export default function ExpenseTracker() {
             date: new Date().toISOString().split('T')[0]
         };
 
-        setExpenses([expense, ...expenses]);
+        if (editingId) {
+            setExpenses(expenses.map(e => e.id === editingId ? expenseData : e));
+            setEditingId(null);
+        } else {
+            setExpenses([expenseData, ...expenses]);
+        }
+
         setNewExpense({
             title: '',
             amount: '',
@@ -103,6 +110,20 @@ export default function ExpenseTracker() {
             customAmounts: {}
         });
         setIsAdding(false);
+    };
+
+    const handleEditExpense = (expense) => {
+        setNewExpense({
+            title: expense.title,
+            amount: expense.amount,
+            payer: expense.payer,
+            involved: expense.involved,
+            splitType: expense.splitType || 'equal',
+            customAmounts: expense.customAmounts || {},
+            percentages: expense.percentages || {}
+        });
+        setEditingId(expense.id);
+        setIsAdding(true);
     };
 
     const toggleInvolved = (member) => {
@@ -227,7 +248,7 @@ export default function ExpenseTracker() {
                                     <div key={member} className="bg-white border-2 border-muted px-4 py-2 rounded-2xl flex items-center gap-3 text-sm font-black shadow-sm group hover:border-primary/40 transition-all">
                                         <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px]">{member[0]}</div>
                                         <span>{member}</span>
-                                        <button onClick={() => handleRemoveMember(member)} className="text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-all">
+                                        <button onClick={() => handleRemoveMember(member)} className="text-muted-foreground hover:text-destructive transition-all">
                                             <X className="h-4 w-4" />
                                         </button>
                                     </div>
@@ -408,8 +429,10 @@ export default function ExpenseTracker() {
                                         </div>
 
                                         <div className="flex items-center justify-between pt-6 border-t">
-                                            <Button variant="ghost" onClick={() => setIsAdding(false)} className="rounded-xl font-bold font-black text-xs tracking-widest uppercase">Discard</Button>
-                                            <Button onClick={handleAddExpense} className="h-14 px-12 rounded-2xl font-black shadow-xl shadow-primary/20">SAVE EXPENSE</Button>
+                                            <Button variant="ghost" onClick={() => { setIsAdding(false); setEditingId(null); }} className="rounded-xl font-bold font-black text-xs tracking-widest uppercase">Discard</Button>
+                                            <Button onClick={handleAddExpense} className="h-14 px-12 rounded-2xl font-black shadow-xl shadow-primary/20">
+                                                {editingId ? 'UPDATE EXPENSE' : 'SAVE EXPENSE'}
+                                            </Button>
                                         </div>
                                     </div>
                                 </Card>
@@ -418,7 +441,11 @@ export default function ExpenseTracker() {
                             <div className="space-y-4">
                                 {expenses.length > 0 ? (
                                     expenses.map(expense => (
-                                        <div key={expense.id} className="p-6 bg-white/60 backdrop-blur-md rounded-[32px] border-2 border-muted hover:border-primary/20 transition-all flex flex-col md:flex-row md:items-center justify-between group shadow-sm">
+                                        <div
+                                            key={expense.id}
+                                            onClick={() => handleEditExpense(expense)}
+                                            className="p-6 bg-white/60 backdrop-blur-md rounded-[32px] border-2 border-muted hover:border-primary/20 transition-all flex flex-col md:flex-row md:items-center justify-between group shadow-sm cursor-pointer active:scale-[0.99]"
+                                        >
                                             <div className="flex items-center gap-5">
                                                 <div className="h-14 w-14 rounded-2xl bg-muted flex items-center justify-center text-primary shrink-0 group-hover:bg-primary group-hover:text-white transition-all">
                                                     <DollarSign className="h-6 w-6" />
@@ -437,8 +464,11 @@ export default function ExpenseTracker() {
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all rounded-xl"
-                                                    onClick={() => setExpenses(expenses.filter(e => e.id !== expense.id))}
+                                                    className="text-muted-foreground hover:text-destructive transition-all rounded-xl"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setExpenses(expenses.filter(e => e.id !== expense.id));
+                                                    }}
                                                 >
                                                     <Trash2 className="h-5 w-5" />
                                                 </Button>
@@ -535,7 +565,7 @@ export default function ExpenseTracker() {
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
+            </div >
+        </div >
     );
 }

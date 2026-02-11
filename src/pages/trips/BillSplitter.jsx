@@ -55,6 +55,8 @@ export default function BillSplitter() {
     const [splitMethod, setSplitMethod] = useState('equal'); // 'equal' | 'manual'
     const [manualShares, setManualShares] = useState({});
 
+    const [editingId, setEditingId] = useState(null);
+
     const [expenses, setExpenses] = useState([]);
 
     // Handlers
@@ -98,8 +100,8 @@ export default function BillSplitter() {
 
         const typeLabel = expenseType === 'Others' ? (description || 'Others') : expenseType;
 
-        const newExpense = {
-            id: Date.now(),
+        const expenseData = {
+            id: editingId || Date.now(),
             type: typeLabel,
             amount: expenseAmount,
             payer,
@@ -107,9 +109,48 @@ export default function BillSplitter() {
             splitMethod
         };
 
-        setExpenses([...expenses, newExpense]);
+        if (editingId) {
+            setExpenses(expenses.map(e => e.id === editingId ? expenseData : e));
+            setEditingId(null);
+        } else {
+            setExpenses([...expenses, expenseData]);
+        }
 
         // Reset form
+        setAmount('');
+        setDescription('');
+        setExpenseType('Food');
+        setPayer('You');
+        setSplitMethod('equal');
+        setManualShares({});
+    };
+
+    const handleEdit = (expense) => {
+        setAmount(expense.amount.toString());
+        setExpenseType(['Food', 'Gas', 'Hotel'].includes(expense.type) ? expense.type : 'Others');
+        if (!['Food', 'Gas', 'Hotel'].includes(expense.type)) {
+            setDescription(expense.type);
+        }
+        setPayer(expense.payer);
+        setSplitMethod(expense.splitMethod);
+
+        // Reconstruct manual shares if in manual mode
+        if (expense.splitMethod === 'manual') {
+            // Mapping from numbers back to strings for inputs
+            const sharesStr = {};
+            Object.keys(expense.shares).forEach(k => sharesStr[k] = expense.shares[k].toString());
+            setManualShares(sharesStr);
+        } else {
+            setManualShares({});
+        }
+
+        setEditingId(expense.id);
+        // Scroll to form
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const cancelEdit = () => {
+        setEditingId(null);
         setAmount('');
         setDescription('');
         setExpenseType('Food');
@@ -341,9 +382,16 @@ export default function BillSplitter() {
                             )}
                         </div>
 
-                        <Button onClick={handleAddExpense} className="w-full h-12 rounded-xl font-black text-sm uppercase tracking-wider shadow-lg shadow-primary/20">
-                            Add Expense
-                        </Button>
+                        <div className="flex gap-2">
+                            {editingId && (
+                                <Button onClick={cancelEdit} variant="outline" className="flex-1 h-12 rounded-xl font-black text-sm uppercase tracking-wider">
+                                    Cancel
+                                </Button>
+                            )}
+                            <Button onClick={handleAddExpense} className={`${editingId ? 'flex-1' : 'w-full'} h-12 rounded-xl font-black text-sm uppercase tracking-wider shadow-lg shadow-primary/20`}>
+                                {editingId ? 'Update Expense' : 'Add Expense'}
+                            </Button>
+                        </div>
                     </CardContent>
                 </Card>
 
@@ -356,7 +404,11 @@ export default function BillSplitter() {
                         </div>
 
                         {expenses.map((expense) => (
-                            <div key={expense.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 relative group">
+                            <div
+                                key={expense.id}
+                                onClick={() => handleEdit(expense)}
+                                className={`bg-white p-4 rounded-2xl shadow-sm border relative group cursor-pointer transition-all active:scale-[0.99] ${editingId === expense.id ? 'border-primary ring-1 ring-primary' : 'border-gray-100 hover:border-primary/30'}`}
+                            >
                                 <div className="flex justify-between items-start mb-2">
                                     <div>
                                         <h4 className="font-black text-gray-800">{expense.type}</h4>
@@ -368,8 +420,8 @@ export default function BillSplitter() {
                                     </div>
                                 </div>
                                 <button
-                                    onClick={() => handleDeleteExpense(expense.id)}
-                                    className="absolute -top-2 -right-2 bg-red-100 text-red-500 p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                    onClick={(e) => { e.stopPropagation(); handleDeleteExpense(expense.id); }}
+                                    className="absolute -top-2 -right-2 bg-red-100 text-red-500 p-1.5 rounded-full shadow-sm"
                                 >
                                     <Trash2 size={12} />
                                 </button>

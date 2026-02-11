@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { getDestinations, createDestination, deleteDestination } from '../lib/api';
-import { Trash2, Plus, MapPin, ImageIcon } from 'lucide-react';
+import { getDestinations, createDestination, updateDestination, deleteDestination } from '../lib/api';
+import { Trash2, Plus, MapPin, ImageIcon, Pencil, X } from 'lucide-react';
 import ImageUpload from '../components/ImageUpload';
+
 
 export default function DestinationsManager() {
     const [destinations, setDestinations] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingId, setEditingId] = useState(null);
     const [formData, setFormData] = useState({ name: '', description: '', image_url: '' });
 
     useEffect(() => {
@@ -35,16 +37,35 @@ export default function DestinationsManager() {
         }
     };
 
+    const handleEdit = (dest) => {
+        setEditingId(dest.id);
+        setFormData({
+            name: dest.name,
+            description: dest.description,
+            image_url: dest.image_url
+        });
+        setIsModalOpen(true);
+    };
+
+    const resetForm = () => {
+        setFormData({ name: '', description: '', image_url: '' });
+        setEditingId(null);
+        setIsModalOpen(false);
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            await createDestination(formData);
-            setIsModalOpen(false);
-            setFormData({ name: '', description: '', image_url: '' });
+            if (editingId) {
+                await updateDestination(editingId, formData);
+            } else {
+                await createDestination(formData);
+            }
+            resetForm();
             loadDestinations();
         } catch (error) {
-            console.error('Failed to create:', error);
-            alert('Error creating destination');
+            console.error('Failed to save:', error);
+            alert('Error saving destination');
         }
     };
 
@@ -58,7 +79,7 @@ export default function DestinationsManager() {
                     <p className="text-slate-500">Manage states and cities for itineraries.</p>
                 </div>
                 <button
-                    onClick={() => setIsModalOpen(true)}
+                    onClick={() => { resetForm(); setIsModalOpen(true); }}
                     className="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl font-medium transition-colors flex items-center gap-2"
                 >
                     <Plus size={18} />
@@ -82,7 +103,15 @@ export default function DestinationsManager() {
                                 <td className="px-6 py-4">
                                     <div className="w-12 h-12 rounded-lg bg-slate-100 overflow-hidden border border-slate-200">
                                         {dest.image_url ? (
-                                            <img src={dest.image_url} alt={dest.name} className="w-full h-full object-cover" />
+                                            <img
+                                                src={dest.image_url}
+                                                alt={dest.name}
+                                                className="w-full h-full object-cover"
+                                                onError={(e) => {
+                                                    e.target.onerror = null;
+                                                    e.target.src = 'https://images.unsplash.com/photo-1596422846543-75c6fc197f07?q=80&w=400&auto=format&fit=crop';
+                                                }}
+                                            />
                                         ) : (
                                             <div className="w-full h-full flex items-center justify-center text-slate-400">
                                                 <ImageIcon size={20} />
@@ -96,12 +125,20 @@ export default function DestinationsManager() {
                                 </td>
                                 <td className="px-6 py-4 text-slate-600 max-w-md truncate">{dest.description}</td>
                                 <td className="px-6 py-4 text-right">
-                                    <button
-                                        onClick={() => handleDelete(dest.id)}
-                                        className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded-lg transition-colors"
-                                    >
-                                        <Trash2 size={18} />
-                                    </button>
+                                    <div className="flex justify-end gap-2">
+                                        <button
+                                            onClick={() => handleEdit(dest)}
+                                            className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 rounded-lg transition-colors"
+                                        >
+                                            <Pencil size={18} />
+                                        </button>
+                                        <button
+                                            onClick={() => handleDelete(dest.id)}
+                                            className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded-lg transition-colors"
+                                        >
+                                            <Trash2 size={18} />
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         ))}
@@ -120,7 +157,12 @@ export default function DestinationsManager() {
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
                     <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl">
-                        <h3 className="text-lg font-bold mb-4">Add New Destination</h3>
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-bold">{editingId ? 'Edit Destination' : 'Add New Destination'}</h3>
+                            <button onClick={resetForm} className="text-slate-400 hover:text-slate-600">
+                                <X size={20} />
+                            </button>
+                        </div>
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
@@ -152,7 +194,7 @@ export default function DestinationsManager() {
                             <div className="flex justify-end gap-3 pt-4">
                                 <button
                                     type="button"
-                                    onClick={() => setIsModalOpen(false)}
+                                    onClick={resetForm}
                                     className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
                                 >
                                     Cancel
@@ -161,7 +203,7 @@ export default function DestinationsManager() {
                                     type="submit"
                                     className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90"
                                 >
-                                    Create Destination
+                                    {editingId ? 'Update Destination' : 'Create Destination'}
                                 </button>
                             </div>
                         </form>

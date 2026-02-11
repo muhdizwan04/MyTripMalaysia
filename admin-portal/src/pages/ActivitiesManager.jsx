@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getAttractions, createAttraction, updateAttraction, deleteAttraction, getDestinations, getShops, createShop, updateShop, deleteShop } from '../lib/api';
-import { Trash2, Plus, AlertCircle, CheckCircle, Sparkles, X, Pencil, ImageIcon, Search, Filter, Store, ChevronRight, ArrowLeft } from 'lucide-react';
+import { Trash2, Plus, AlertCircle, CheckCircle, Sparkles, X, Pencil, ImageIcon, Search, Filter, Store, ChevronRight, ArrowLeft, Star } from 'lucide-react';
 import { generateAttractionSuggestions } from '../lib/aiAssist';
 import ImageUpload from '../components/ImageUpload';
 
@@ -12,6 +12,11 @@ export default function ActivitiesManager() {
     const [editingId, setEditingId] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterCategory, setFilterCategory] = useState('All');
+
+    // Quick Filters
+    const [showOnlyMalls, setShowOnlyMalls] = useState(false);
+    const [showOnlyTrending, setShowOnlyTrending] = useState(false);
+    const [showOnlyMustVisit, setShowOnlyMustVisit] = useState(false);
 
     // Shop Management State (Nested View)
     const [selectedMall, setSelectedMall] = useState(null); // When not null, show shop directory
@@ -36,12 +41,13 @@ export default function ActivitiesManager() {
         latitude: '',
         longitude: '',
         suggested_duration: 60,
-        avgCost: 0,
+        price: 0,
         price_level: 1,
         opening_hours: '',
         tags: [],
         isMall: false,
         isTrending: false,
+        isMustVisit: false,
         description: '',
         image_url: ''
     });
@@ -89,12 +95,13 @@ export default function ActivitiesManager() {
             latitude: attraction.latitude,
             longitude: attraction.longitude,
             suggested_duration: attraction.suggested_duration || attraction.avgDuration || 60,
-            avgCost: attraction.price || 0,
+            price: attraction.price || 0,
             price_level: attraction.price_level || 1,
             opening_hours: attraction.opening_hours || '',
             tags: attraction.tags || [],
-            isMall: attraction.is_mall || false,
-            isTrending: attraction.is_trending || false,
+            isMall: attraction.isMall || false,
+            isTrending: attraction.isTrending || attraction.is_trending || false,
+            isMustVisit: attraction.isMustVisit || attraction.is_must_visit || false,
             description: attraction.description || '',
             image_url: attraction.image_url || ''
         });
@@ -105,9 +112,9 @@ export default function ActivitiesManager() {
     const resetForm = () => {
         setFormData({
             name: '', destinationId: '', type: 'Nature',
-            latitude: '', longitude: '', suggested_duration: 60, avgCost: 0,
+            latitude: '', longitude: '', suggested_duration: 60, price: 0,
             price_level: 1, opening_hours: '', tags: [],
-            isMall: false, isTrending: false, description: '', image_url: ''
+            isMall: false, isTrending: false, isMustVisit: false, description: '', image_url: ''
         });
         setEditingId(null);
         setIsModalOpen(false);
@@ -130,12 +137,13 @@ export default function ActivitiesManager() {
             latitude: parseFloat(formData.latitude),
             longitude: parseFloat(formData.longitude),
             description: formData.description,
-            price: parseFloat(formData.avgCost),
+            price: parseFloat(formData.price),
             price_level: parseInt(formData.price_level),
             opening_hours: formData.opening_hours,
             tags: formData.tags,
-            is_mall: formData.isMall,
-            is_trending: formData.isTrending,
+            isMall: formData.isMall,
+            isTrending: formData.isTrending,
+            isMustVisit: formData.isMustVisit,
             image_url: formData.image_url,
             suggested_duration: parseInt(formData.suggested_duration)
         };
@@ -235,6 +243,12 @@ export default function ActivitiesManager() {
         const matchesSearch = attr.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             getDestinationName(attr.destinationId).toLowerCase().includes(searchTerm.toLowerCase());
         const matchesCategory = filterCategory === 'All' || attr.type === filterCategory;
+
+        // Quick Filters check
+        if (showOnlyMalls && !attr.isMall) return false;
+        if (showOnlyTrending && !attr.isTrending && !attr.is_trending) return false;
+        if (showOnlyMustVisit && !attr.isMustVisit && !attr.is_must_visit) return false;
+
         return matchesSearch && matchesCategory;
     });
 
@@ -283,7 +297,15 @@ export default function ActivitiesManager() {
                                     <td className="px-6 py-4">
                                         <div className="w-10 h-10 rounded-lg bg-slate-100 overflow-hidden border border-slate-200">
                                             {shop.image_url ? (
-                                                <img src={shop.image_url} alt={shop.name} className="w-full h-full object-cover" />
+                                                <img
+                                                    src={shop.image_url}
+                                                    alt={shop.name}
+                                                    className="w-full h-full object-cover"
+                                                    onError={(e) => {
+                                                        e.target.onerror = null;
+                                                        e.target.src = 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?q=80&w=400&auto=format&fit=crop';
+                                                    }}
+                                                />
                                             ) : (
                                                 <div className="w-full h-full flex items-center justify-center text-slate-400">
                                                     <ImageIcon size={16} />
@@ -453,6 +475,52 @@ export default function ActivitiesManager() {
                 </div>
             </div>
 
+            <div className="flex flex-wrap items-center gap-3">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Quick Filters:</span>
+                <button
+                    onClick={() => setShowOnlyMalls(!showOnlyMalls)}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${showOnlyMalls
+                        ? "bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm"
+                        : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"}`}
+                >
+                    <Store size={14} />
+                    Shopping Malls
+                </button>
+                <button
+                    onClick={() => setShowOnlyTrending(!showOnlyTrending)}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${showOnlyTrending
+                        ? "bg-amber-50 border-amber-200 text-amber-700 shadow-sm"
+                        : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"}`}
+                >
+                    <Sparkles size={14} />
+                    Trending Now
+                </button>
+                <button
+                    onClick={() => setShowOnlyMustVisit(!showOnlyMustVisit)}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${showOnlyMustVisit
+                        ? "bg-red-50 border-red-200 text-red-700 shadow-sm"
+                        : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"}`}
+                >
+                    <Star size={14} />
+                    Must Visit
+                </button>
+
+                {(showOnlyMalls || showOnlyTrending || showOnlyMustVisit || searchTerm || filterCategory !== 'All') && (
+                    <button
+                        onClick={() => {
+                            setSearchTerm('');
+                            setFilterCategory('All');
+                            setShowOnlyMalls(false);
+                            setShowOnlyTrending(false);
+                            setShowOnlyMustVisit(false);
+                        }}
+                        className="text-xs font-bold text-primary hover:underline ml-auto"
+                    >
+                        Clear All Filters
+                    </button>
+                )}
+            </div>
+
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <table className="w-full text-left border-collapse">
                     <thead>
@@ -470,7 +538,15 @@ export default function ActivitiesManager() {
                                 <td className="px-6 py-4">
                                     <div className="w-12 h-12 rounded-lg bg-slate-100 overflow-hidden border border-slate-200">
                                         {attr.image_url ? (
-                                            <img src={attr.image_url} alt={attr.name} className="w-full h-full object-cover" />
+                                            <img
+                                                src={attr.image_url}
+                                                alt={attr.name}
+                                                className="w-full h-full object-cover"
+                                                onError={(e) => {
+                                                    e.target.onerror = null;
+                                                    e.target.src = 'https://images.unsplash.com/photo-1596422846543-75c6fc18a593?q=80&w=400&auto=format&fit=crop';
+                                                }}
+                                            />
                                         ) : (
                                             <div className="w-full h-full flex items-center justify-center text-slate-400">
                                                 <ImageIcon size={20} />
@@ -481,7 +557,7 @@ export default function ActivitiesManager() {
                                 <td className="px-6 py-4">
                                     <div className="flex items-center gap-2">
                                         <span className="font-medium text-slate-900">{attr.name}</span>
-                                        {attr.is_mall && (
+                                        {attr.isMall && (
                                             <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-indigo-100 text-indigo-700">MALL</span>
                                         )}
                                         {attr.is_trending && (
@@ -496,7 +572,7 @@ export default function ActivitiesManager() {
                                 </td>
                                 <td className="px-6 py-4 text-right">
                                     <div className="flex items-center justify-end gap-2">
-                                        {attr.is_mall && (
+                                        {attr.isMall && (
                                             <button
                                                 onClick={() => handleManageShops(attr)}
                                                 className="flex items-center gap-1 px-3 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg text-xs font-bold transition-colors whitespace-nowrap"
@@ -527,18 +603,18 @@ export default function ActivitiesManager() {
 
             {/* Modal */}
             {isModalOpen && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-                    <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-xl my-8">
-                        <div className="flex justify-between items-center mb-4">
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl flex flex-col max-h-[90vh]">
+                        <div className="flex justify-between items-center p-6 border-b border-slate-100">
                             <h3 className="text-lg font-bold">{editingId ? 'Edit Activity' : 'Add New Activity'}</h3>
                             <button onClick={resetForm} className="text-slate-400 hover:text-slate-600">
                                 <X size={20} />
                             </button>
                         </div>
 
-                        {error && <div className="mb-4 text-sm text-red-600 bg-red-50 p-2 rounded">{error}</div>}
+                        {error && <div className="mx-6 mt-4 text-sm text-red-600 bg-red-50 p-2 rounded">{error}</div>}
 
-                        <form onSubmit={handleSubmit} className="space-y-4">
+                        <form id="activity-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">Name *</label>
@@ -590,8 +666,8 @@ export default function ActivitiesManager() {
                                     <input
                                         type="number" min="0"
                                         className="w-full px-3 py-2 border rounded-lg"
-                                        value={formData.avgCost}
-                                        onChange={e => setFormData({ ...formData, avgCost: e.target.value })}
+                                        value={formData.price}
+                                        onChange={e => setFormData({ ...formData, price: e.target.value })}
                                     />
                                 </div>
                             </div>
@@ -634,9 +710,11 @@ export default function ActivitiesManager() {
                                         value={formData.price_level}
                                         onChange={e => setFormData({ ...formData, price_level: e.target.value })}
                                     >
-                                        {[1, 2, 3, 4, 5].map(lvl => (
-                                            <option key={lvl} value={lvl}>{lvl} - {lvl === 1 ? 'Cheap' : lvl === 5 ? 'Luxury' : 'Moderate'}</option>
-                                        ))}
+                                        <option value="1">1 - Budget ($)</option>
+                                        <option value="2">2 - Economy ($$)</option>
+                                        <option value="3">3 - Mid-range ($$$)</option>
+                                        <option value="4">4 - Premium ($$$$)</option>
+                                        <option value="5">5 - Luxury ($$$$$)</option>
                                     </select>
                                 </div>
                             </div>
@@ -654,8 +732,14 @@ export default function ActivitiesManager() {
 
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Tags (Multiple)</label>
-                                <div className="flex flex-wrap gap-2 p-2 bg-slate-50 rounded-lg border border-slate-200">
-                                    {["nature", "family_friendly", "viral_spot", "halal_food", "landmark", "luxury", "cultural", "local_food", "theme_park", "street_food", "nightlife", "photography", "adventure", "heritage", "educational"].map(tag => (
+                                <div className="flex flex-wrap gap-2 p-2 bg-slate-50 rounded-lg border border-slate-200 overflow-y-auto max-h-32">
+                                    {[
+                                        "nature", "family_friendly", "viral_spot", "halal_food", "landmark",
+                                        "luxury", "cultural", "local_food", "theme_park", "street_food",
+                                        "nightlife", "photography", "adventure", "heritage", "educational",
+                                        "must_visit", "city_view", "shopping", "aircon", "viral",
+                                        "history", "free", "cafe", "pastry", "hiking", "fitness"
+                                    ].map(tag => (
                                         <button
                                             key={tag}
                                             type="button"
@@ -666,8 +750,8 @@ export default function ActivitiesManager() {
                                                 setFormData({ ...formData, tags: newTags });
                                             }}
                                             className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-tight transition-colors ${formData.tags.includes(tag)
-                                                    ? "bg-primary text-white shadow-sm"
-                                                    : "bg-white text-slate-400 border border-slate-200 hover:border-slate-300"
+                                                ? "bg-primary text-white shadow-sm"
+                                                : "bg-white text-slate-400 border border-slate-200 hover:border-slate-300"
                                                 }`}
                                         >
                                             {tag.replace('_', ' ')}
@@ -703,6 +787,16 @@ export default function ActivitiesManager() {
                                     />
                                     <span className="text-sm font-medium text-slate-700">Is Trending?</span>
                                 </label>
+
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        className="w-5 h-5 rounded"
+                                        checked={formData.isMustVisit}
+                                        onChange={e => setFormData({ ...formData, isMustVisit: e.target.checked })}
+                                    />
+                                    <span className="text-sm font-medium text-slate-700">Is Must-Visit Spot?</span>
+                                </label>
                             </div>
 
                             <div>
@@ -721,13 +815,13 @@ export default function ActivitiesManager() {
                                 label="Activity Image"
                             />
 
-                            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                                <button type="button" onClick={resetForm} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium">Cancel</button>
-                                <button type="submit" className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 font-medium whitespace-nowrap">
-                                    {editingId ? 'Update Activity' : 'Create Activity'}
-                                </button>
-                            </div>
                         </form>
+                        <div className="flex justify-end gap-3 p-6 border-t border-slate-100 bg-slate-50/50 rounded-b-2xl">
+                            <button type="button" onClick={resetForm} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium">Cancel</button>
+                            <button form="activity-form" type="submit" className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 font-medium whitespace-nowrap">
+                                {editingId ? 'Update Activity' : 'Create Activity'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
