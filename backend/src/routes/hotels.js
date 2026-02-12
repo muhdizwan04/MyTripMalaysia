@@ -5,13 +5,23 @@ const { db } = require('../config/firebase');
 // Get all hotels
 router.get('/', async (req, res) => {
     try {
-        const hotelsSnapshot = await db.collection('hotels').get();
+        console.log('GET /hotels called with query:', req.query);
+        const { limit = 20 } = req.query;
+        let query = db.collection('hotels');
+
+        if (limit) {
+            query = query.limit(parseInt(limit));
+        }
+
+        const hotelsSnapshot = await query.get();
         const hotels = hotelsSnapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
         }));
+        console.log(`Returning ${hotels.length} hotels`);
         res.json(hotels);
     } catch (error) {
+        console.error('Error in GET /hotels:', error);
         res.status(500).json({ error: error.message });
     }
 });

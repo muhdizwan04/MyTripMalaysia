@@ -1,5 +1,8 @@
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// For Android Emulator use 'http://10.0.2.2:5001/api'
+// For iOS Simulator use 'http://localhost:5001/api'
 const API_URL = 'http://localhost:5001/api';
 
 export const api = axios.create({
@@ -71,22 +74,25 @@ export const fetchMustVisitAttractions = () => api.get('/attractions', { params:
 export const fetchItineraries = () => api.get('/itineraries').then(res => res.data);
 
 // Mock Fetch Trips (frontend-only for now, mimicking API)
-export const fetchUserTrips = () => {
+export const fetchUserTrips = async () => {
+    const savedTripsJson = await AsyncStorage.getItem('my_trips');
+    const savedTrips = savedTripsJson ? JSON.parse(savedTripsJson) : [];
+    // Simulate network delay
     return new Promise((resolve) => {
-        const savedTrips = JSON.parse(localStorage.getItem('my_trips') || '[]');
-        // Simulate network delay
         setTimeout(() => {
             resolve(savedTrips.reverse());
         }, 300);
     });
 };
 
-export const createLocalTrip = (tripData) => {
+export const createLocalTrip = async (tripData) => {
+    const savedTripsJson = await AsyncStorage.getItem('my_trips');
+    const savedTrips = savedTripsJson ? JSON.parse(savedTripsJson) : [];
+    const newTrip = { ...tripData, id: Date.now().toString() }; // Simple ID gen
+    savedTrips.push(newTrip);
+    await AsyncStorage.setItem('my_trips', JSON.stringify(savedTrips));
+
     return new Promise((resolve) => {
-        const savedTrips = JSON.parse(localStorage.getItem('my_trips') || '[]');
-        const newTrip = { ...tripData, id: Date.now().toString() }; // Simple ID gen
-        savedTrips.push(newTrip);
-        localStorage.setItem('my_trips', JSON.stringify(savedTrips));
         setTimeout(() => {
             resolve(newTrip);
         }, 300);

@@ -8,7 +8,7 @@ import { Clock, MapPin, DollarSign, Loader2, ArrowLeft, Bus, Car, Star, X, Info,
 import TripMap from '../../components/trips/TripMap';
 import ActivityDetailsModal from '../../components/trips/ActivityDetailsModal';
 import { useCurrency } from '../../context/CurrencyContext';
-import { getValidationRules } from '../../lib/api';
+import { getValidationRules, getAttractions } from '../../lib/api';
 import { validateItinerary } from '../../lib/validationUtils';
 
 export default function ItineraryView() {
@@ -108,194 +108,214 @@ export default function ItineraryView() {
     // I will use a smaller chunk for the state and another for the header.
 
     useEffect(() => {
-        const generateItinerary = () => {
+        const generateItinerary = async () => {
             if (tripData.preGeneratedItinerary) {
                 setItinerary(tripData.preGeneratedItinerary);
                 setIsLoading(false);
                 return;
             }
-            setTimeout(() => {
-                try {
-                    const days = tripData.duration || 3;
-                    const states = (tripData.locations && tripData.locations.length > 0) ? tripData.locations : (tripData.location ? [tripData.location] : ['Kuala Lumpur']);
-                    const generated = [];
-                    const usedActivityIds = new Set();
-                    const userSelectedActivities = tripData.activities || [];
 
-                    // 1. Mark user selected IDs as used
-                    userSelectedActivities.forEach(a => {
-                        if (a && a.id) usedActivityIds.add(a.id);
-                    });
+            try {
+                const days = tripData.duration || 3;
+                const states = (tripData.locations && tripData.locations.length > 0) ? tripData.locations : (tripData.location ? [tripData.location] : ['Kuala Lumpur']);
 
-                    const findActivity = (state, category, type, nearCoords = null) => {
-                        const stateSpecific = STATE_ACTIVITIES[state] || [];
-                        const pool = [...stateSpecific];
+                // Fetch attractions for all locations
+                const attractionsPromises = states.map(state => getAttractions({ state }));
+                const attractionsArrays = await Promise.all(attractionsPromises);
 
-                        let candidates = pool.filter(a =>
-                            (a.category === category || a.type === type) && !usedActivityIds.has(a.id)
-                        );
+                // Create a map of state -> attractions
+                const stateAttractions = {};
+                states.forEach((state, index) => {
+                    // Map API data to expected format if needed, but it should be compatible
+                    // Ensure we have coords array [lat, lng]
+                    stateAttractions[state] = attractionsArrays[index].map(attr => ({
+                        ...attr,
+                        coords: attr.latitude && attr.longitude ? [attr.latitude, attr.longitude] : null,
+                        // Ensure category/type are present
+                        category: attr.category || (attr.type === 'food' ? 'Food' : 'Activity'),
+                        type: attr.type || 'activity'
+                    }));
+                });
 
-                        if (candidates.length === 0) {
-                            candidates = pool.filter(a => !usedActivityIds.has(a.id));
-                        }
+                const generated = [];
+                const usedActivityIds = new Set();
+                const userSelectedActivities = tripData.activities || [];
 
-                        if (candidates.length > 0) {
-                            if (nearCoords) {
-                                candidates.sort((a, b) => {
-                                    const distA = a.coords ? Math.sqrt(Math.pow(a.coords[0] - nearCoords[0], 2) + Math.pow(a.coords[1] - nearCoords[1], 2)) : Infinity;
-                                    const distB = b.coords ? Math.sqrt(Math.pow(b.coords[0] - nearCoords[0], 2) + Math.pow(b.coords[1] - nearCoords[1], 2)) : Infinity;
-                                    return distA - distB;
-                                });
-                            }
-                            const selected = candidates[0];
-                            usedActivityIds.add(selected.id);
-                            return { ...selected, state };
-                        }
-                        return null;
-                    };
+                // 1. Mark user selected IDs as used
+                userSelectedActivities.forEach(a => {
+                    if (a && a.id) usedActivityIds.add(a.id);
+                });
 
-                    const getNearbySpots = (state, currentId, count = 2) => {
-                        const stateSpecific = STATE_ACTIVITIES[state] || [];
-                        return stateSpecific
-                            .filter(a => a.id !== currentId && !usedActivityIds.has(a.id))
-                            .slice(0, count);
-                    };
+                const findActivity = (state, category, type, nearCoords = null) => {
+                    // Use fetched attractions instead of STATE_ACTIVITIES
+                    const stateSpecific = stateAttractions[state] || STATE_ACTIVITIES[state] || [];
+                    let pool = [...stateSpecific];
 
-                    // Distribute states across days
-                    const daysPerState = Math.ceil(days / states.length);
+                    let candidates = pool.filter(a =>
+                        (a.category === category || a.type === type) && !usedActivityIds.has(a.id)
+                    );
 
-                    for (let day = 1; day <= days; day++) {
-                        const stateIdx = Math.min(states.length - 1, Math.floor((day - 1) / daysPerState));
-                        const state = states[stateIdx];
-                        let dailyPlan = [];
-
-                        // Default slots
-                        let slots = [
-                            { time: '09:00', label: 'Morning Adventure', category: 'Nature', type: 'activity' },
-                            { time: '13:00', label: 'Local Lunch', category: 'Food', type: 'food' },
-                            { time: '15:30', label: 'Afternoon Discovery', category: 'Cultural', type: 'activity' },
-                            { time: '19:30', label: 'Evening Vibe', category: 'Food', type: 'food' }
-                        ];
-
-                        // Adjust slots for Last Day (Check-out first)
-                        if (day === days) {
-                            slots = [
-                                { time: '13:00', label: 'Farewell Lunch', category: 'Food', type: 'food' },
-                                { time: '15:00', label: 'Last Minute Shopping', category: 'Shopping', type: 'activity' }
-                            ];
-                        }
-
-                        slots.forEach((slot, sIdx) => {
-                            // Priority 1: User chose something for THIS DAY and roughly this time?
-                            const userMatch = userSelectedActivities.find(a => {
-                                if (!a || !a.time) return false;
-                                if (a.day !== day) return false; // MUST MATCH DAY
-                                try {
-                                    const [h] = a.time.split(':').map(Number);
-                                    const [slotH] = slot.time.split(':').map(Number);
-                                    return Math.abs(h - slotH) <= 2 && !dailyPlan.find(dp => dp.id === a.id);
-                                } catch (e) { return false; }
-                            });
-
-                            let act = userMatch;
-                            // Only auto-fill if NO activities were selected by the user for the entire trip
-                            // This ensures manual picks are respected strictly.
-                            if (!act && (!userSelectedActivities || userSelectedActivities.length === 0)) {
-                                act = findActivity(state, slot.category, slot.type);
-                            }
-
-                            if (act) {
-                                // Add transport if not first slot
-                                if (dailyPlan.length > 0) {
-                                    dailyPlan.push({
-                                        id: `trans-${day}-${sIdx}`,
-                                        type: 'transport',
-                                        method: tripData.transport === 'public' ? 'Public Transport' : 'Grab / Car',
-                                        duration: '20 mins',
-                                        price: tripData.transport === 'public' ? 5 : 18,
-                                        time: slot.time
-                                    });
-                                }
-
-                                // Inject Nearby spots for richer UI
-                                const nearby = getNearbySpots(state, act.id);
-                                dailyPlan.push({
-                                    ...act,
-                                    time: act.time || slot.time,
-                                    nearbySpots: nearby
-                                });
-                            }
-                        });
-
-                        // Standard Check-in/Check-out Logic
-                        const hotel = (tripData.accommodation && (tripData.accommodation[day] || tripData.accommodation[1])) || { name: 'Selected Hotel' };
-
-                        // Day 1: Check-in
-                        if (day === 1) {
-                            dailyPlan.push({
-                                id: `checkin-${day}`,
-                                type: 'accommodation',
-                                category: 'Logistics',
-                                name: `Check-in: ${hotel.name}`,
-                                time: '15:00',
-                                duration: 1,
-                                image: hotel.image || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&q=80&w=1000'
-                            });
-                        }
-
-                        // Last Day: Check-out (Must be first)
-                        if (day === days) {
-                            dailyPlan.push({
-                                id: `checkout-${day}`,
-                                type: 'accommodation',
-                                category: 'Logistics',
-                                name: `Check-out: ${hotel.name}`,
-                                time: '10:00',
-                                duration: 1,
-                                image: hotel.image || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&q=80&w=1000'
-                            });
-                        }
-
-                        // All Days except Last: Back to Hotel
-                        if (day < days) {
-                            dailyPlan.push({
-                                id: `back-${day}`,
-                                type: 'accommodation',
-                                category: 'Logistics',
-                                name: `Back to ${hotel.name}`,
-                                time: '22:00',
-                                duration: 0,
-                                image: hotel.image || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&q=80&w=1000'
-                            });
-                        }
-
-                        // Append any user selected activities for this day that didn't match a slot
-                        userSelectedActivities
-                            .filter(a => a.day === day && !dailyPlan.find(dp => dp.id === a.id))
-                            .forEach(a => {
-                                dailyPlan.push({ ...a, nearbySpots: getNearbySpots(state, a.id) });
-                            });
-
-                        // Sort tasks by time
-                        dailyPlan.sort((a, b) => {
-                            if (!a.time) return 1;
-                            if (!b.time) return -1;
-                            const [h1, m1] = a.time.split(':').map(Number);
-                            const [h2, m2] = b.time.split(':').map(Number);
-                            return (h1 * 60 + m1) - (h2 * 60 + m2);
-                        });
-
-                        generated.push({ day, state, activities: dailyPlan });
+                    if (candidates.length === 0) {
+                        candidates = pool.filter(a => !usedActivityIds.has(a.id));
                     }
 
-                    setItinerary(generated);
-                    setIsLoading(false);
-                } catch (err) {
-                    console.error("Itinerary generation failed:", err);
-                    setItinerary([]);
-                    setIsLoading(false);
+                    if (candidates.length > 0) {
+                        if (nearCoords) {
+                            candidates.sort((a, b) => {
+                                const distA = a.coords ? Math.sqrt(Math.pow(a.coords[0] - nearCoords[0], 2) + Math.pow(a.coords[1] - nearCoords[1], 2)) : Infinity;
+                                const distB = b.coords ? Math.sqrt(Math.pow(b.coords[0] - nearCoords[0], 2) + Math.pow(b.coords[1] - nearCoords[1], 2)) : Infinity;
+                                return distA - distB;
+                            });
+                        }
+                        const selected = candidates[0];
+                        usedActivityIds.add(selected.id);
+                        return { ...selected, state };
+                    }
+                    return null;
+                };
+
+                const getNearbySpots = (state, currentId, count = 2) => {
+                    // Use fetched attractions instead of STATE_ACTIVITIES
+                    const stateSpecific = stateAttractions[state] || STATE_ACTIVITIES[state] || [];
+                    return stateSpecific
+                        .filter(a => a.id !== currentId && !usedActivityIds.has(a.id))
+                        .slice(0, count);
+                };
+
+                // Distribute states across days
+                const daysPerState = Math.ceil(days / states.length);
+
+                for (let day = 1; day <= days; day++) {
+                    const stateIdx = Math.min(states.length - 1, Math.floor((day - 1) / daysPerState));
+                    const state = states[stateIdx];
+                    let dailyPlan = [];
+
+                    // Default slots
+                    let slots = [
+                        { time: '09:00', label: 'Morning Adventure', category: 'Nature', type: 'activity' },
+                        { time: '13:00', label: 'Local Lunch', category: 'Food', type: 'food' },
+                        { time: '15:30', label: 'Afternoon Discovery', category: 'Cultural', type: 'activity' },
+                        { time: '19:30', label: 'Evening Vibe', category: 'Food', type: 'food' }
+                    ];
+
+                    // Adjust slots for Last Day (Check-out first)
+                    if (day === days) {
+                        slots = [
+                            { time: '13:00', label: 'Farewell Lunch', category: 'Food', type: 'food' },
+                            { time: '15:00', label: 'Last Minute Shopping', category: 'Shopping', type: 'activity' }
+                        ];
+                    }
+
+                    slots.forEach((slot, sIdx) => {
+                        // Priority 1: User chose something for THIS DAY and roughly this time?
+                        const userMatch = userSelectedActivities.find(a => {
+                            if (!a || !a.time) return false;
+                            if (a.day !== day) return false; // MUST MATCH DAY
+                            try {
+                                const [h] = a.time.split(':').map(Number);
+                                const [slotH] = slot.time.split(':').map(Number);
+                                return Math.abs(h - slotH) <= 2 && !dailyPlan.find(dp => dp.id === a.id);
+                            } catch (e) { return false; }
+                        });
+
+                        let act = userMatch;
+                        // Only auto-fill if NO activities were selected by the user for the entire trip
+                        // This ensures manual picks are respected strictly.
+                        if (!act && (!userSelectedActivities || userSelectedActivities.length === 0)) {
+                            act = findActivity(state, slot.category, slot.type);
+                        }
+
+                        if (act) {
+                            // Add transport if not first slot
+                            if (dailyPlan.length > 0) {
+                                dailyPlan.push({
+                                    id: `trans-${day}-${sIdx}`,
+                                    type: 'transport',
+                                    method: tripData.transport === 'public' ? 'Public Transport' : 'Grab / Car',
+                                    duration: '20 mins',
+                                    price: tripData.transport === 'public' ? 5 : 18,
+                                    time: slot.time
+                                });
+                            }
+
+                            // Inject Nearby spots for richer UI
+                            const nearby = getNearbySpots(state, act.id);
+                            dailyPlan.push({
+                                ...act,
+                                time: act.time || slot.time,
+                                nearbySpots: nearby
+                            });
+                        }
+                    });
+
+                    // Standard Check-in/Check-out Logic
+                    const hotel = (tripData.accommodation && (tripData.accommodation[day] || tripData.accommodation[1])) || { name: 'Selected Hotel' };
+
+                    // Day 1: Check-in
+                    if (day === 1) {
+                        dailyPlan.push({
+                            id: `checkin-${day}`,
+                            type: 'accommodation',
+                            category: 'Logistics',
+                            name: `Check-in: ${hotel.name}`,
+                            time: '15:00',
+                            duration: 1,
+                            image: hotel.image || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&q=80&w=1000'
+                        });
+                    }
+
+                    // Last Day: Check-out (Must be first)
+                    if (day === days) {
+                        dailyPlan.push({
+                            id: `checkout-${day}`,
+                            type: 'accommodation',
+                            category: 'Logistics',
+                            name: `Check-out: ${hotel.name}`,
+                            time: '10:00',
+                            duration: 1,
+                            image: hotel.image || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&q=80&w=1000'
+                        });
+                    }
+
+                    // All Days except Last: Back to Hotel
+                    if (day < days) {
+                        dailyPlan.push({
+                            id: `back-${day}`,
+                            type: 'accommodation',
+                            category: 'Logistics',
+                            name: `Back to ${hotel.name}`,
+                            time: '22:00',
+                            duration: 0,
+                            image: hotel.image || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&q=80&w=1000'
+                        });
+                    }
+
+                    // Append any user selected activities for this day that didn't match a slot
+                    userSelectedActivities
+                        .filter(a => a.day === day && !dailyPlan.find(dp => dp.id === a.id))
+                        .forEach(a => {
+                            dailyPlan.push({ ...a, nearbySpots: getNearbySpots(state, a.id) });
+                        });
+
+                    // Sort tasks by time
+                    dailyPlan.sort((a, b) => {
+                        if (!a.time) return 1;
+                        if (!b.time) return -1;
+                        const [h1, m1] = a.time.split(':').map(Number);
+                        const [h2, m2] = b.time.split(':').map(Number);
+                        return (h1 * 60 + m1) - (h2 * 60 + m2);
+                    });
+
+                    generated.push({ day, state, activities: dailyPlan });
                 }
-            }, 2500);
+
+                setItinerary(generated);
+                setIsLoading(false);
+            } catch (err) {
+                console.error("Itinerary generation failed:", err);
+                setItinerary([]);
+                setIsLoading(false);
+            }
         };
 
         generateItinerary();

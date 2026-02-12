@@ -418,7 +418,8 @@ export default function CreateTrip() {
                 <div className="space-y-2">
                     <label className="text-[10px] font-black uppercase tracking-widest text-primary/60 pl-1">Where are you heading? (Select multiple optional)</label>
                     <div className="grid grid-cols-2 gap-2">
-                        {Object.keys(STATE_ACTIVITIES).map(state => {
+                        {destinations.map(dest => {
+                            const state = dest.name;
                             const isSelected = tripData.locations.includes(state);
                             const intelligence = DESTINATION_INTELLIGENCE[state];
                             return (

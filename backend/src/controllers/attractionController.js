@@ -3,8 +3,8 @@ const attractionService = require('../services/attractionService');
 const getAll = async (req, res) => {
     try {
         console.log('GET /attractions called with query:', req.query);
-        const { destinationId, isMall, is_must_visit, type } = req.query;
-        const attractions = await attractionService.getAllAttractions({ destinationId, isMall, is_must_visit, type });
+        const { destinationId, isMall, is_must_visit, type, state } = req.query;
+        const attractions = await attractionService.getAllAttractions({ destinationId, isMall, is_must_visit, type, state });
         console.log(`Returning ${attractions.length} attractions`);
         res.json(attractions);
     } catch (error) {

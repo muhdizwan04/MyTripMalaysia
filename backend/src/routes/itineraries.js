@@ -8,12 +8,23 @@ const itinerariesCollection = db.collection('itineraries');
 // GET all itineraries (for trending section)
 router.get('/', async (req, res) => {
     try {
-        // Simple fetch, or can order by popularity if there's a field for it.
-        // For now, user just asked to fetch from itineraries collection.
-        const snapshot = await itinerariesCollection.get();
+        console.log('GET /itineraries called with query:', req.query);
+        const { limit = 10 } = req.query;
+        let query = itinerariesCollection;
+
+        // Remove orderBy for now as it might require a Firestore index we don't have yet
+        // query = query.orderBy('created_at', 'desc');
+
+        if (limit) {
+            query = query.limit(parseInt(limit));
+        }
+
+        const snapshot = await query.get();
         const itineraries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        console.log(`Returning ${itineraries.length} itineraries`);
         res.json(itineraries);
     } catch (error) {
+        console.error('Error in GET /itineraries:', error);
         res.status(500).json({ error: error.message });
     }
 });
