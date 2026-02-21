@@ -4,17 +4,21 @@ import { getFirestore } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // -------------------------------------------------------------
-// 🚨 MISSING CONFIGURATION
-// Please paste your Firebase keys here.
-// You can find these in your Firebase Console > Project Settings.
+// 🚨 FIREBASE CONFIG REQUIRED FOR DATABASE & AUTH
+// Your app cannot read from Firebase until these are set.
+//
+// Get them from: Firebase Console → your project → Project settings (gear)
+// → Your apps → select your Web app (or add one) → copy the config object.
+//
+// Backend uses project: mytripmalaysia-b3e4d — use the SAME project’s Web app config here.
 // -------------------------------------------------------------
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY_HERE",
-    authDomain: "YOUR_PROJECT.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_BUCKET.appspot.com",
-    messagingSenderId: "SENDER_ID",
-    appId: "APP_ID"
+    apiKey: "AIzaSyDT6x-cHHGsaPBvhKt8Dr9BUH_P6E6_asM",
+    authDomain: "mytripmalaysia-b3e4d.firebaseapp.com",
+    projectId: "mytripmalaysia-b3e4d",
+    storageBucket: "mytripmalaysia-b3e4d.firebasestorage.app",
+    messagingSenderId: "897589628896",
+    appId: "1:897589628896:ios:b4b84629bf85de1c0a6585"
 };
 
 // Initialize App

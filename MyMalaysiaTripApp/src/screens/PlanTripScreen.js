@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Image, Modal, Platform, Alert, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Image, Modal, Platform, Alert, Dimensions, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import {
@@ -15,6 +15,7 @@ import { MALAYSIA_LOCATIONS, STATE_ACTIVITIES, DESTINATION_INTELLIGENCE, ACCOMMO
 import { getDestinations, getAttractions, getShops, fetchHotels } from '../lib/api';
 import { generateSmartItinerary } from '../utils/smartItinerary';
 import { calculateCenterPoint, calculateDistanceFromRef } from '../lib/utils';
+import { useTrip } from '../context/TripContext';
 
 const { width } = Dimensions.get('window');
 
@@ -37,6 +38,7 @@ const TAG_MAPPING = {
 export default function PlanTripScreen() {
     const navigation = useNavigation();
     const route = useRoute();
+    const { setItinerary: setCtxItinerary, setTripName: setCtxTripName, setLocation: setCtxLocation } = useTrip();
 
     // State
     const [step, setStep] = useState(1);
@@ -52,7 +54,7 @@ export default function PlanTripScreen() {
         locations: [],
         date: new Date(),
         activities: [],
-        priorities: ['Local Food'], // updated default label
+        priorities: ['Food'], // same as web default
         duration: 3,
         guests: 2,
         transportMode: 'own',
@@ -71,12 +73,19 @@ export default function PlanTripScreen() {
     const [genProgress, setGenProgress] = useState(0);
     const [genStatus, setGenStatus] = useState('Optimizing routes...');
 
+    // Custom Activity Modal (same as web)
+    const [showCustomModal, setShowCustomModal] = useState(false);
+    const [customForm, setCustomForm] = useState({ name: '', location: '' });
+
     // Mall Modal State
     const [showMallModal, setShowMallModal] = useState(false);
     const [selectedMall, setSelectedMall] = useState(null);
     const [selectedShops, setSelectedShops] = useState([]);
     const [mallShops, setMallShops] = useState([]);
     const [loadingShops, setLoadingShops] = useState(false);
+
+    // Overlap validation: same activity at same time on same day — user must change day or time (match web)
+    const [overlapError, setOverlapError] = useState(null);
 
     // Initial Load
     useEffect(() => {
@@ -181,11 +190,23 @@ export default function PlanTripScreen() {
         if (!tripData.locations.length) return [];
         let all = [...backendAttractions, ...backendMalls];
         if (all.length === 0) {
-            // Fallback to constants
             all = tripData.locations.flatMap(loc => STATE_ACTIVITIES[loc] || []);
         }
         return all;
     }, [tripData.locations, backendAttractions, backendMalls]);
+
+    // Suggestions for Step 5 (same as web: not yet selected, match priorities)
+    const suggestions = useMemo(() => {
+        if (!tripData.locations.length || !availableStateActivities.length) return [];
+        const selectedIds = new Set(tripData.activities.map(a => a.id));
+        return availableStateActivities.filter(a => {
+            if (selectedIds.has(a.id)) return false;
+            return tripData.priorities.some(p => {
+                const s = (p || '').toLowerCase();
+                return (a.category?.toLowerCase().includes(s)) || (a.type?.toLowerCase().includes(s)) || (a.tags?.some(t => t?.toLowerCase().includes(s)));
+            });
+        }).slice(0, 5);
+    }, [tripData.locations, tripData.activities, tripData.priorities, availableStateActivities]);
 
 
     // Actions
@@ -243,29 +264,54 @@ export default function PlanTripScreen() {
         });
     };
 
+    // Find overlapping activity (same day + same time); return that activity or null
+    const getOverlap = (activityId, time, day, activities) =>
+        activities.find(a => a.id !== activityId && a.time === time && a.day === day) || null;
+
+    const setOverlapErrorAndAlert = (message) => {
+        setOverlapError(message);
+        Alert.alert(
+            'Time slot taken',
+            message + '\n\nPlease choose a different Day or Time for your activity.',
+            [{ text: 'OK' }]
+        );
+    };
+
     const toggleActivity = (act) => {
         setTripData(prev => {
             const exists = prev.activities.find(a => a.id === act.id);
             if (exists) {
+                setOverlapError(null);
                 return { ...prev, activities: prev.activities.filter(a => a.id !== act.id) };
             }
-            return {
-                ...prev,
-                activities: [...prev.activities, {
-                    ...act,
-                    time: '10:00',
-                    duration: act.duration || 2,
-                    day: 1
-                }]
-            };
+            const defaultTime = '10:00';
+            const defaultDay = 1;
+            const newList = [...prev.activities, { ...act, time: defaultTime, duration: act.duration || 2, day: defaultDay }];
+            const other = getOverlap(act.id, defaultTime, defaultDay, newList);
+            if (other) {
+                const msg = `"${other.name}" is already scheduled for Day ${defaultDay} at ${defaultTime}.`;
+                setOverlapErrorAndAlert(msg);
+            } else {
+                setOverlapError(null);
+            }
+            return { ...prev, activities: newList };
         });
     };
 
     const updateScheduledActivity = (id, updates) => {
-        setTripData(prev => ({
-            ...prev,
-            activities: prev.activities.map(a => a.id === id ? { ...a, ...updates } : a)
-        }));
+        setTripData(prev => {
+            const next = prev.activities.map(a => a.id === id ? { ...a, ...updates } : a);
+            const act = next.find(a => a.id === id);
+            if (act && (updates.time !== undefined || updates.day !== undefined)) {
+                const other = getOverlap(id, act.time, act.day, next);
+                if (other) {
+                    setOverlapErrorAndAlert(`"${other.name}" is already scheduled for Day ${act.day} at ${act.time}.`);
+                } else {
+                    setOverlapError(null);
+                }
+            }
+            return { ...prev, activities: next };
+        });
     };
 
     const handleMallClick = async (mall) => {
@@ -285,18 +331,26 @@ export default function PlanTripScreen() {
     const confirmMallSelection = () => {
         if (!selectedMall) return;
 
+        const defaultTime = '10:00';
+        const defaultDay = 1;
         const mallWithShops = {
             ...selectedMall,
             selectedShops: selectedShops,
-            time: '10:00',
-            duration: 2 + (selectedShops.length * 0.5), // Extra time for shops
-            day: 1
+            time: defaultTime,
+            duration: 2 + (selectedShops.length * 0.5),
+            day: defaultDay
         };
 
-        setTripData(prev => ({
-            ...prev,
-            activities: [...prev.activities, mallWithShops]
-        }));
+        setTripData(prev => {
+            const next = [...prev.activities, mallWithShops];
+            const other = getOverlap(mallWithShops.id, defaultTime, defaultDay, next);
+            if (other) {
+                setOverlapErrorAndAlert(`"${other.name}" is already scheduled for Day ${defaultDay} at ${defaultTime}.`);
+            } else {
+                setOverlapError(null);
+            }
+            return { ...prev, activities: next };
+        });
 
         setShowMallModal(false);
         setSelectedMall(null);
@@ -324,14 +378,12 @@ export default function PlanTripScreen() {
             if (i >= statuses.length) {
                 clearInterval(interval);
                 setTimeout(() => {
-                    // Navigate to Itinerary
-                    const itinerary = [];
                     const sortedActivities = [...tripData.activities].sort((a, b) => {
                         if (a.day !== b.day) return a.day - b.day;
                         return a.time.localeCompare(b.time);
                     });
 
-                    // Add check-in for Day 1
+                    const itinerary = [];
                     itinerary.push({
                         id: 'log-checkin',
                         type: 'logistics',
@@ -342,32 +394,44 @@ export default function PlanTripScreen() {
                     });
 
                     sortedActivities.forEach((act, idx) => {
-                        // Add activity
-                        itinerary.push({
-                            ...act,
-                            period: `Day ${act.day} • ${act.time}`
-                        });
+                        itinerary.push({ ...act, period: `Day ${act.day} • ${act.time}` });
 
-                        // Add Transport Connector if not last on that day
                         const nextAct = sortedActivities[idx + 1];
                         if (nextAct && nextAct.day === act.day) {
                             itinerary.push({
                                 id: `trans-${act.id}-${nextAct.id}`,
                                 type: 'transport',
+                                day: act.day,
                                 mode: tripData.transportMode === 'own' ? 'Car' : 'Grab',
                                 duration: '20-30m',
                                 price: tripData.transportMode === 'own' ? 5 : 18,
-                                time: act.time // Just for ordering logic in view if needed
+                                time: act.time
                             });
                         }
                     });
 
+                    const tripName = tripData.locations?.length ? `Trip to ${tripData.locations.join(', ')}` : 'My Malaysian Adventure';
+                    const location = tripData.locations?.[0] || 'Kuala Lumpur';
+
+                    setCtxItinerary(itinerary);
+                    setCtxTripName(tripName);
+                    setCtxLocation(location);
+
+                    const startDate = tripData.date instanceof Date ? tripData.date : new Date(tripData.date || Date.now());
+
                     navigation.navigate('Itinerary', {
-                        itinerary: itinerary,
-                        tripName: `Trip to ${tripData.locations.join(', ')}`,
-                        location: tripData.locations[0],
-                        members: ['You', 'Sarah', 'Amir'],
-                        transportMode: tripData.transportMode
+                        itinerary,
+                        tripName,
+                        location,
+                        tripData: {
+                            locations: tripData.locations,
+                            duration: tripData.duration,
+                            guests: tripData.guests,
+                            transportMode: tripData.transportMode,
+                            accommodation: tripData.accommodation,
+                            startDate: startDate.toISOString ? startDate.toISOString() : String(startDate)
+                        },
+                        members: ['You', 'Sarah', 'Amir']
                     });
                     setIsGenerating(false);
                 }, 500);
@@ -443,9 +507,9 @@ export default function PlanTripScreen() {
                 <Text style={styles.subtitle}>Tell us the details of your getaway.</Text>
             </View>
 
-            {/* Locations */}
+            {/* Locations - same label as web */}
             <View style={styles.section}>
-                <Text style={styles.label}>WHERE ARE YOU HEADING?</Text>
+                <Text style={styles.label}>WHERE ARE YOU HEADING? (SELECT MULTIPLE OPTIONAL)</Text>
                 <View style={styles.grid}>
                     {destinations.map(dest => {
                         const isSelected = tripData.locations.includes(dest.name);
@@ -466,6 +530,18 @@ export default function PlanTripScreen() {
                         );
                     })}
                 </View>
+                {tripData.locations.length > 0 && (() => {
+                    const totalMinDays = tripData.locations.reduce((sum, loc) => sum + (DESTINATION_INTELLIGENCE[loc]?.minDays || 2), 0);
+                    if (tripData.duration < totalMinDays) {
+                        return (
+                            <View style={styles.durationWarning}>
+                                <Info size={14} color="#c2410c" />
+                                <Text style={styles.durationWarningText}>Recommended duration for selected spots is {totalMinDays} days.</Text>
+                            </View>
+                        );
+                    }
+                    return null;
+                })()}
             </View>
 
             <View style={styles.row}>
@@ -550,12 +626,50 @@ export default function PlanTripScreen() {
         </ScrollView>
     );
 
+    const addCustomActivity = () => {
+        if (!customForm.name.trim() || !customForm.location.trim()) return;
+        const newAct = {
+            id: `custom-${Date.now()}`,
+            name: customForm.name.trim(),
+            location: customForm.location.trim(),
+            category: 'User Custom',
+            image: 'https://images.unsplash.com/photo-1596422846543-75c6fc18a593?q=80&w=2670&auto=format&fit=crop',
+            time: '12:00',
+            duration: 2,
+            day: 1,
+            price: 0,
+            rating: 5.0
+        };
+        const other = getOverlap(newAct.id, newAct.time, newAct.day, [...tripData.activities, newAct]);
+        if (other) setOverlapErrorAndAlert(`"${other.name}" is already scheduled for Day ${newAct.day} at ${newAct.time}.`);
+        else setOverlapError(null);
+        setTripData(prev => ({ ...prev, activities: [...prev.activities, newAct] }));
+        setShowCustomModal(false);
+        setCustomForm({ name: '', location: '' });
+    };
+
     const renderStep3 = () => (
         <ScrollView contentContainerStyle={styles.scrollContent}>
-            <View style={styles.headerBlock}>
-                <Text style={styles.title}>Select Spots</Text>
-                <Text style={styles.subtitle}>Suggested for your selected priorities.</Text>
+            <View style={[styles.headerBlock, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap' }]}>
+                <View>
+                    <Text style={styles.title}>Select Spots</Text>
+                    <Text style={styles.subtitle}>Suggested for your selected priorities.</Text>
+                </View>
+                <TouchableOpacity
+                    style={styles.addCustomButton}
+                    onPress={() => setShowCustomModal(true)}
+                >
+                    <Plus size={14} color="#0f172a" />
+                    <Text style={styles.addCustomButtonText}>ADD CUSTOM</Text>
+                </TouchableOpacity>
             </View>
+
+            {overlapError ? (
+                <View style={styles.warningBox}>
+                    <Info size={20} color="#dc2626" style={{ marginRight: 8 }} />
+                    <Text style={styles.warningText}>{overlapError}</Text>
+                </View>
+            ) : null}
 
             {loadingAttractions && (
                 <View style={styles.loadingBox}>
@@ -668,6 +782,60 @@ export default function PlanTripScreen() {
                     </View>
                 );
             })}
+
+            {/* Custom Activities Added (same as web) */}
+            {tripData.activities.filter(a => a.id.startsWith('custom-')).map(act => (
+                <View key={act.id} style={[styles.activityCard, styles.activityCardSelected]}>
+                    <View style={styles.activityRow}>
+                        <View style={[styles.activityImage, { backgroundColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center' }]}>
+                            <MapPin size={24} color="#64748b" />
+                        </View>
+                        <View style={styles.activityInfo}>
+                            <Text style={styles.activityName}>{act.name}</Text>
+                            <Text style={[styles.activityMetaText, { marginTop: 4 }]}>Your Spot • {act.location}</Text>
+                        </View>
+                        <TouchableOpacity
+                            style={[styles.addButtonSmall, styles.removeButton]}
+                            onPress={() => setTripData(prev => ({ ...prev, activities: prev.activities.filter(a => a.id !== act.id) }))}
+                        >
+                            <X size={16} color="#fff" />
+                        </TouchableOpacity>
+                    </View>
+                    <View style={styles.inlineScheduling}>
+                        <View style={styles.schedulingControls}>
+                            <View style={styles.controlGroup}>
+                                <Text style={styles.controlLabel}>TIME</Text>
+                                <TouchableOpacity
+                                    style={styles.timeInputMini}
+                                    onPress={() => {
+                                        Alert.prompt('Set Time', 'Enter start time (e.g. 10:30)', [
+                                            { text: 'Cancel' },
+                                            { text: 'Set', onPress: (val) => updateScheduledActivity(act.id, { time: val || act.time }) }
+                                        ], 'plain-text', act.time);
+                                    }}
+                                >
+                                    <Clock size={12} color="#64748b" />
+                                    <Text style={styles.timeInputText}>{act.time}</Text>
+                                </TouchableOpacity>
+                            </View>
+                            <View style={styles.controlGroup}>
+                                <Text style={styles.controlLabel}>DAY</Text>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.daySelectionMini}>
+                                    {[...Array(tripData.duration)].map((_, i) => (
+                                        <TouchableOpacity
+                                            key={i}
+                                            onPress={() => updateScheduledActivity(act.id, { day: i + 1 })}
+                                            style={[styles.miniDayPill, act.day === (i + 1) && styles.miniDayPillSelected]}
+                                        >
+                                            <Text style={[styles.miniDayText, act.day === (i + 1) && styles.miniDayTextSelected]}>D{i + 1}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </View>
+                        </View>
+                    </View>
+                </View>
+            ))}
         </ScrollView>
     );
 
@@ -772,6 +940,41 @@ export default function PlanTripScreen() {
         return (
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 <View style={styles.headerBlock}>
+                    <Text style={styles.title}>Suggestions for You</Text>
+                    <Text style={styles.subtitle}>Extra filler activities nearby.</Text>
+                </View>
+
+                {/* Suggestion cards (same as web) */}
+                {suggestions.length > 0 && (
+                    <View style={styles.suggestionsSection}>
+                        {suggestions.map(s => (
+                            <TouchableOpacity
+                                key={s.id}
+                                style={styles.suggestionCard}
+                                onPress={() => toggleActivity(s)}
+                                activeOpacity={0.9}
+                            >
+                                <Image source={{ uri: s.image }} style={styles.suggestionImage} />
+                                <View style={styles.suggestionContent}>
+                                    <Text style={styles.suggestionName}>{s.name}</Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                                        <Star size={12} color="#eab308" fill="#eab308" />
+                                        <Text style={styles.suggestionMeta}>{s.rating || 4.5} • {s.category}</Text>
+                                    </View>
+                                    <TouchableOpacity
+                                        style={styles.addToPlanBtn}
+                                        onPress={() => toggleActivity(s)}
+                                    >
+                                        <Plus size={14} color="#0f172a" />
+                                        <Text style={styles.addToPlanBtnText}>ADD TO PLAN</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                )}
+
+                <View style={[styles.headerBlock, { marginTop: suggestions.length > 0 ? 24 : 0 }]}>
                     <Text style={styles.title}>Trip Summary 🇲🇾</Text>
                     <Text style={styles.subtitle}>Ready to build your itinerary?</Text>
                 </View>
@@ -908,6 +1111,48 @@ export default function PlanTripScreen() {
                 </View>
             </Modal>
 
+            {/* Custom Activity Modal (same as web - Add Your Gem) */}
+            <Modal visible={showCustomModal} animationType="slide" transparent>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.customModalContent}>
+                        <View style={styles.customModalHeader}>
+                            <Text style={styles.customModalTitle}>Add Your Gem</Text>
+                            <Text style={styles.customModalSubtitle}>What local secret are we visiting?</Text>
+                        </View>
+                        <View style={styles.customModalBody}>
+                            <Text style={styles.label}>SPOT NAME</Text>
+                            <TextInput
+                                style={styles.customInput}
+                                placeholder="e.g. Hidden Cafe in KL"
+                                placeholderTextColor="#94a3b8"
+                                value={customForm.name}
+                                onChangeText={v => setCustomForm(prev => ({ ...prev, name: v }))}
+                            />
+                            <Text style={[styles.label, { marginTop: 16 }]}>LOCATION DETAILS</Text>
+                            <TextInput
+                                style={styles.customInput}
+                                placeholder="e.g. Bukit Bintang Area"
+                                placeholderTextColor="#94a3b8"
+                                value={customForm.location}
+                                onChangeText={v => setCustomForm(prev => ({ ...prev, location: v }))}
+                            />
+                        </View>
+                        <View style={styles.customModalFooter}>
+                            <TouchableOpacity style={styles.customModalCancel} onPress={() => { setShowCustomModal(false); setCustomForm({ name: '', location: '' }); }}>
+                                <Text style={styles.customModalCancelText}>CANCEL</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.customModalAdd, (!customForm.name.trim() || !customForm.location.trim()) && styles.customModalAddDisabled]}
+                                onPress={addCustomActivity}
+                                disabled={!customForm.name.trim() || !customForm.location.trim()}
+                            >
+                                <Text style={styles.customModalAddText}>ADD SPOT</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
             {/* Generation Loading Overay */}
             <Modal visible={isGenerating} transparent>
                 <View style={styles.genOverlay}>
@@ -934,10 +1179,14 @@ export default function PlanTripScreen() {
                     <TouchableOpacity
                         onPress={handleNext}
                         style={[styles.nextButton, step === 1 && { flex: 1 }]}
-                        disabled={(step === 1 && tripData.priorities.length === 0) || (step === 4 && Object.keys(tripData.accommodation).length < tripData.duration)}
+                        disabled={
+                            (step === 1 && tripData.priorities.length === 0) ||
+                            (step === 3 && !!overlapError) ||
+                            (step === 4 && Object.keys(tripData.accommodation).length < tripData.duration)
+                        }
                     >
                         <Text style={styles.nextButtonText}>
-                            {step === 1 ? 'Next: Where & When' : step === 2 ? 'Pick Activities' : step === 3 ? 'Choose Stays' : 'Final Review'}
+                            {step === 1 ? 'Next: Where & When' : step === 2 ? 'Pick My Activities' : step === 3 ? 'Review My Plan' : 'Final Review'}
                         </Text>
                         <ChevronRight size={20} color="#fff" />
                     </TouchableOpacity>
@@ -979,6 +1228,8 @@ const styles = StyleSheet.create({
     optionCardSelected: { borderColor: '#0f172a', backgroundColor: '#f1f5f9' },
     optionLabel: { fontSize: 12, fontWeight: '700', color: '#64748b', flex: 1 },
     optionLabelSelected: { color: '#0f172a' },
+    durationWarning: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff7ed', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#fed7aa', marginTop: 12 },
+    durationWarningText: { fontSize: 10, fontWeight: '700', color: '#c2410c', flex: 1 },
 
     inputContainer: { flexDirection: 'row', alignItems: 'center', height: 64, borderWidth: 2, borderColor: '#e2e8f0', borderRadius: 24, paddingHorizontal: 20 },
     input: { flex: 1, fontSize: 18, fontWeight: '700', color: '#0f172a', height: '100%' },
@@ -1007,6 +1258,8 @@ const styles = StyleSheet.create({
 
     addButtonSmall: { width: 36, height: 36, borderRadius: 12, borderWidth: 2, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center' },
     removeButton: { backgroundColor: '#ef4444', borderColor: '#ef4444' },
+    addCustomButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, borderWidth: 2, borderStyle: 'dashed', borderColor: 'rgba(15,23,42,0.4)', backgroundColor: '#f8fafc' },
+    addCustomButtonText: { fontSize: 10, fontWeight: '900', color: '#0f172a', letterSpacing: 0.5 },
 
     // Bottom Nav
     bottomNav: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 24, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#f1f5f9', flexDirection: 'row', gap: 16 },
@@ -1127,7 +1380,31 @@ const styles = StyleSheet.create({
     warningText: {
         fontSize: 10,
         fontWeight: '700',
-        color: '#d97706', // orange-600
-        flex: 1, // Ensure text wraps if needed
+        color: '#d97706',
+        flex: 1,
     },
+
+    // Custom Activity Modal
+    customModalContent: { backgroundColor: '#fff', borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, maxHeight: '85%' },
+    customModalHeader: { backgroundColor: '#0f172a', marginHorizontal: -24, marginTop: -24, padding: 32, paddingBottom: 40, borderTopLeftRadius: 32, borderTopRightRadius: 32 },
+    customModalTitle: { fontSize: 24, fontWeight: '900', color: '#fff', marginBottom: 8 },
+    customModalSubtitle: { fontSize: 14, fontWeight: '600', color: 'rgba(255,255,255,0.7)' },
+    customModalBody: { paddingTop: 24 },
+    customInput: { height: 56, borderWidth: 2, borderColor: '#e2e8f0', borderRadius: 16, paddingHorizontal: 20, fontSize: 16, fontWeight: '700', color: '#0f172a', marginTop: 8 },
+    customModalFooter: { flexDirection: 'row', gap: 12, marginTop: 32, paddingTop: 16 },
+    customModalCancel: { flex: 1, height: 56, borderRadius: 24, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
+    customModalCancelText: { fontSize: 14, fontWeight: '900', color: '#64748b' },
+    customModalAdd: { flex: 1, height: 56, borderRadius: 24, backgroundColor: '#0f172a', alignItems: 'center', justifyContent: 'center', shadowColor: '#0f172a', shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
+    customModalAddDisabled: { opacity: 0.5 },
+    customModalAddText: { fontSize: 14, fontWeight: '900', color: '#fff' },
+
+    // Step 5 Suggestions
+    suggestionsSection: { marginBottom: 24 },
+    suggestionCard: { flexDirection: 'row', backgroundColor: '#f8fafc', borderRadius: 28, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#f1f5f9' },
+    suggestionImage: { width: 80, height: 80, borderRadius: 20, backgroundColor: '#e2e8f0' },
+    suggestionContent: { flex: 1, marginLeft: 16, justifyContent: 'center' },
+    suggestionName: { fontSize: 16, fontWeight: '900', color: '#0f172a', marginBottom: 4 },
+    suggestionMeta: { fontSize: 11, fontWeight: '800', color: '#64748b' },
+    addToPlanBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: 8, paddingVertical: 8, paddingHorizontal: 16, borderRadius: 12, borderWidth: 2, borderStyle: 'dashed', borderColor: 'rgba(15,23,42,0.4)' },
+    addToPlanBtnText: { fontSize: 10, fontWeight: '900', color: '#0f172a' },
 });

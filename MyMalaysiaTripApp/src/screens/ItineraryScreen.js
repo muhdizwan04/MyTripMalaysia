@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ScrollView, Image, FlatList, Modal, TextInput, Alert, Animated } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ScrollView, Image, FlatList, Modal, TextInput, Alert, Animated, Share } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-    ChevronLeft, MapPin, Clock, Car, MoreVertical, Navigation,
+    ChevronLeft, MapPin, Clock, Car, Bus, MoreVertical, Navigation,
     Info, Sparkles, User, Plus, MoveUp, MoveDown, Check, X,
     Utensils, Bed, ShoppingBag, Mountain, Map as MapIcon, Calendar, Users,
     Bookmark, Share2, Download, Printer, AlertTriangle, ArrowRight, Star, ArrowLeft
@@ -31,6 +31,7 @@ export default function ItineraryScreen() {
     // Params from Context
     const {
         itinerary,
+        setItinerary: setCtxItinerary,
         tripName: ctxTripName,
         location: ctxLocation,
         removeActivity,
@@ -40,33 +41,52 @@ export default function ItineraryScreen() {
 
     const tripName = ctxTripName || route.params?.tripName || 'Malaysian Story';
     const locationName = ctxLocation || route.params?.location || 'Kuala Lumpur';
+    const tripData = route.params?.tripData || {};
+    const transportMode = tripData.transportMode || route.params?.transportMode || 'own';
 
     // State
     const [tripMembers, setTripMembers] = useState(['You', 'Sarah', 'Amir']);
     const [showMap, setShowMap] = useState(false);
 
-    // Group itinerary by day for the UI
+    // Parse time to minutes for correct chronological sort (e.g. 09:00 < 14:00)
+    const timeToMinutes = (timeStr) => {
+        if (!timeStr) return 0;
+        const [h, m] = String(timeStr).split(':').map(Number);
+        return (h || 0) * 60 + (m || 0);
+    };
+
+    // Group itinerary by day and sort by time so timeline matches website
     const dailyPlans = useMemo(() => {
         const grouped = {};
         if (!itinerary) return grouped;
 
         itinerary.forEach(item => {
-            const d = item.day || 1;
+            const d = item.day != null ? item.day : 1;
             if (!grouped[d]) grouped[d] = [];
             grouped[d].push({ ...item, type: item.type || 'activity' });
         });
 
-        // Add logistics and sorting
         Object.keys(grouped).forEach(day => {
             const dayItems = grouped[day];
-            // Sort by time
-            dayItems.sort((a, b) => (a.time || '00:00').localeCompare(b.time || '00:00'));
+            dayItems.sort((a, b) => {
+                const ta = timeToMinutes(a.time);
+                const tb = timeToMinutes(b.time);
+                if (ta !== tb) return ta - tb;
+                return (a.type === 'transport' ? 1 : 0) - (b.type === 'transport' ? 1 : 0);
+            });
         });
 
         return grouped;
     }, [itinerary]);
 
-    const dayList = Object.keys(dailyPlans).sort((a, b) => parseInt(a) - parseInt(b));
+    const dayList = Object.keys(dailyPlans).sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
+
+    // Trip start date for timeline labels (like website)
+    const startDate = useMemo(() => {
+        const raw = tripData.startDate || route.params?.startDate;
+        if (raw) return new Date(raw);
+        return new Date();
+    }, [tripData.startDate, route.params?.startDate]);
 
     // Pro Tips for current location
     const tips = TRAVEL_ADVICE[locationName] || TRAVEL_ADVICE['General'] || [];
@@ -115,7 +135,7 @@ export default function ItineraryScreen() {
                             return ta - tb;
                         });
 
-                        setItinerary(newItinerary);
+                        setCtxItinerary(newItinerary);
                         Alert.alert("Success", `${spot.name} added!`);
                     }
                 }
@@ -135,16 +155,21 @@ export default function ItineraryScreen() {
 
     const renderActivityCard = (item, index, dayItems) => {
         if (item.type === 'transport') {
+            const isPublic = transportMode === 'public';
             return (
                 <View key={item.id || index} style={styles.transportWrapper}>
-                    <View style={styles.transportCard}>
-                        <View style={[styles.transportIconBox, { backgroundColor: '#f97316' }]}>
-                            <Car size={16} color="#fff" />
+                    <View style={[styles.transportCard, isPublic && styles.transportCardPublic]}>
+                        <View style={[styles.transportIconBox, { backgroundColor: isPublic ? '#059669' : '#f97316' }]}>
+                            {isPublic ? <Bus size={16} color="#fff" /> : <Car size={16} color="#fff" />}
                         </View>
                         <View style={styles.transportBody}>
                             <View style={styles.transportHead}>
-                                <Text style={styles.transportLabel}>GRAB / CAR</Text>
-                                <Text style={styles.transportCost}>~RM {item.price || 18}</Text>
+                                <Text style={[styles.transportLabel, isPublic && { color: '#047857' }]}>
+                                    {isPublic ? 'PUBLIC TRANSPORT' : 'GRAB / CAR'}
+                                </Text>
+                                <Text style={[styles.transportCost, isPublic && { color: '#047857' }]}>
+                                    {isPublic ? 'RM 5.00' : `~RM ${item.price || 18}`}
+                                </Text>
                             </View>
                             <Text style={styles.transportTitle}>Trip towards next stop</Text>
                         </View>
@@ -187,6 +212,9 @@ export default function ItineraryScreen() {
                     activeOpacity={0.9}
                     onPress={() => Alert.alert(item.name, item.description || "Activity Details")}
                 >
+                    {item.image ? (
+                        <Image source={{ uri: item.image }} style={styles.cardImage} />
+                    ) : null}
                     <View style={styles.cardHeaderRow}>
                         <Text style={styles.cardCat}>{item.category || item.type}</Text>
                         <View style={styles.ratingBadge}>
@@ -309,23 +337,30 @@ export default function ItineraryScreen() {
                         </ScrollView>
                     </View>
 
-                    {/* Itinerary Flow Section */}
+                    {/* Timeline Section (like website) */}
+                    <View style={styles.timelineSectionHeader}>
+                        <Clock size={18} color="#0f172a" />
+                        <Text style={styles.timelineSectionTitle}>YOUR ITINERARY TIMELINE</Text>
+                    </View>
+
                     <View style={styles.flowContainer}>
-                        {/* Vertical Timeline Line */}
                         <View style={styles.timelineLine} />
 
-                        {dayList.map((dayNum) => (
+                        {dayList.map((dayNum) => {
+                            const dayIndex = parseInt(dayNum, 10) - 1;
+                            const dayDate = new Date(startDate);
+                            dayDate.setDate(dayDate.getDate() + dayIndex);
+                            const dateLabel = dayDate.toLocaleDateString('en-MY', { weekday: 'long', day: 'numeric', month: 'short' });
+
+                            return (
                             <View key={dayNum} style={styles.dayGroup}>
-                                {/* Day Header */}
                                 <View style={styles.dayHeader}>
                                     <View style={styles.dayCircle}>
                                         <Text style={styles.dayCircleText}>{dayNum}</Text>
                                     </View>
                                     <View style={styles.dayHeaderInfo}>
                                         <Text style={styles.dayLocationName}>{locationName}</Text>
-                                        <Text style={styles.dayDateSubtext}>
-                                            {new Date(new Date().setDate(new Date().getDate() + (parseInt(dayNum) - 1))).toLocaleDateString('en-MY', { weekday: 'long', day: 'numeric', month: 'short' }).toUpperCase()}
-                                        </Text>
+                                        <Text style={styles.dayDateSubtext}>{dateLabel.toUpperCase()}</Text>
                                     </View>
                                 </View>
 
@@ -364,35 +399,41 @@ export default function ItineraryScreen() {
                                     );
                                 })()}
 
-                                {/* Activities for the day */}
+                                {/* Activities for the day (chronological order) */}
                                 {dailyPlans[dayNum].map((item, idx) => renderActivityCard(item, idx, dailyPlans[dayNum]))}
                             </View>
-                        ))}
+                            );
+                        })}
                     </View>
 
-                    {/* Strategy Summary Section */}
+                    {/* Strategy Summary Section (match web) */}
                     <View style={styles.summarySection}>
                         <Text style={styles.summaryTitle}>STRATEGY SUMMARY</Text>
                         <View style={styles.summaryCard}>
                             <View style={styles.summaryRow}>
                                 <View style={styles.summaryIconBox}><Clock size={16} color="#64748b" /></View>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={styles.sumLabel}>Net Duration</Text>
-                                    <Text style={styles.sumValue}>{itinerary.length * 4}h over {dayList.length} days</Text>
+                                    <Text style={styles.sumLabel}>Duration</Text>
+                                    <Text style={styles.sumValue}>{tripData.duration || dayList.length} Days</Text>
                                 </View>
                             </View>
                             <View style={styles.summaryRow}>
                                 <View style={styles.summaryIconBox}><Users size={16} color="#64748b" /></View>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={styles.sumLabel}>Travel Party</Text>
-                                    <Text style={styles.sumValue}>{tripMembers.length} Person</Text>
+                                    <Text style={styles.sumLabel}>Party Size</Text>
+                                    <Text style={styles.sumValue}>{tripData.guests || tripMembers.length} Pax</Text>
                                 </View>
                             </View>
                             <View style={[styles.summaryRow, { borderBottomWidth: 0 }]}>
                                 <View style={styles.summaryIconBox}><DollarSign color="#64748b" /></View>
                                 <View style={{ flex: 1 }}>
                                     <Text style={styles.sumLabel}>Estimated Cost</Text>
-                                    <Text style={styles.sumValue}>RM {(itinerary.length * 45).toFixed(2)}</Text>
+                                    <Text style={styles.sumValue}>
+                                        {formatPrice(
+                                            ((itinerary?.filter(a => a.type !== 'transport' && a.type !== 'logistics').reduce((s, a) => s + (a.price || 0), 0) || 0) +
+                                            (tripData.accommodation ? Object.values(tripData.accommodation).reduce((s, stay) => s + (stay.price || 0), 0) : 0)) * (tripData.guests || 1)
+                                        )}
+                                    </Text>
                                 </View>
                             </View>
                         </View>
@@ -477,6 +518,10 @@ const styles = StyleSheet.create({
     tipLabelText: { fontSize: 9, fontWeight: '900', color: '#3b82f6', letterSpacing: 1 },
     tipContentText: { fontSize: 13, fontWeight: '600', color: '#64748b', lineHeight: 20 },
 
+    // Timeline section (like website)
+    timelineSectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 24, paddingLeft: 4 },
+    timelineSectionTitle: { fontSize: 12, fontWeight: '900', color: '#0f172a', letterSpacing: 2 },
+
     // Flow & Timeline
     flowContainer: { position: 'relative', paddingLeft: 24 }, // Add padding to container so absolute lefts work relative to this
     timelineLine: { position: 'absolute', left: 83, top: 0, bottom: 0, width: 4, backgroundColor: '#e2e8f0', borderRadius: 2 }, // Thicker, lighter line
@@ -500,6 +545,7 @@ const styles = StyleSheet.create({
 
     // Activity Cards (Horizontal)
     cardContainer: { flex: 1, marginLeft: 100, backgroundColor: '#fff', padding: 20, borderRadius: 28, borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 16, elevation: 3 },
+    cardImage: { width: '100%', height: 140, borderRadius: 16, marginBottom: 12, backgroundColor: '#e2e8f0' },
     cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
     cardCat: { fontSize: 10, fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1 },
     ratingBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fefce8', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: '#fef3c7' },
@@ -517,6 +563,7 @@ const styles = StyleSheet.create({
     // Transport Card
     transportWrapper: { paddingLeft: 100, marginBottom: 32 },
     transportCard: { flexDirection: 'row', alignItems: 'center', gap: 16, padding: 16, borderRadius: 24, borderWidth: 1, borderStyle: 'dashed', borderColor: '#fdba74', backgroundColor: '#fff7ed' },
+    transportCardPublic: { borderColor: '#6ee7b7', backgroundColor: '#ecfdf5' },
     transportIconBox: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
     transportBody: { flex: 1 },
     transportHead: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
